@@ -111,6 +111,7 @@ export default {
   matriyaNotSet: 'כתובת מטריה לא מוגדרת או לא זמינה (הגדר MATRIYA_BACK_URL ב־.env של maneger-back)',
   queryOver: 'חיפוש בתוך',
   allFiles: 'כל הקבצים',
+  selectFileToAsk: 'בחר קובץ לשאלה',
   askQuestion: 'שאל שאלה',
   questionPlaceholder: 'הזן שאלה...',
   run: 'הרץ',
