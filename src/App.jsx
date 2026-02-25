@@ -695,9 +695,6 @@ function RagTab({ projectId }) {
   React.useEffect(() => {
     if (projectId) loadFiles();
   }, [projectId]);
-  React.useEffect(() => {
-    if (projectFiles.length > 0 && !selectedFilename) setSelectedFilename(projectFiles[0].original_name);
-  }, [projectFiles]);
 
   const onFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -799,13 +796,14 @@ function RagTab({ projectId }) {
           <div className="form-group">
             <label>{t.queryOver}</label>
             <select value={selectedFilename} onChange={e => setSelectedFilename(e.target.value)}>
+              <option value="">{t.allFiles}</option>
               {projectFiles.map(f => <option key={f.id} value={f.original_name}>{f.original_name}</option>)}
             </select>
           </div>
         )}
         <label>{t.askQuestion}</label>
         <textarea value={query} onChange={e => setQuery(e.target.value)} placeholder={t.questionPlaceholder} disabled={!health?.ok} rows={4} />
-        <button type="button" onClick={runSearch} disabled={loading || !health?.ok || !selectedFilename} className={loading ? 'btn-loading' : ''}>{loading ? t.loading : t.run}</button>
+        <button type="button" onClick={runSearch} disabled={loading || !health?.ok || projectFiles.length === 0} className={loading ? 'btn-loading' : ''}>{loading ? t.loading : t.run}</button>
         {result && (
           <>
             <div className="flex gap mt-16" style={{ flexWrap: 'wrap' }}>
