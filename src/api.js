@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_MANEGER_API_URL || 'http://localhost:8001';
+// Backend URL from .env (VITE_MANEGER_API_URL) – used for all API and file uploads
+const API_BASE = (import.meta.env.VITE_MANEGER_API_URL || 'http://localhost:8001').replace(/\/$/, '');
 
 export const api = axios.create({
   baseURL: API_BASE,
