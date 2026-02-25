@@ -120,6 +120,10 @@ export default {
   projectName: 'שם הפרויקט',
 
   settings: 'הגדרות',
+  chat: "צ'אט",
+  chatPlaceholder: 'כתוב הודעה...',
+  chatSend: 'שלח',
+  noChatYet: 'אין הודעות עדיין. תגיד שלום!',
   projectSettings: 'הגדרות פרויקט',
   editProject: 'ערוך פרויקט',
   deleteProject: 'מחיקת הפרויקט',
@@ -162,7 +166,7 @@ export default {
   alreadyMember: 'כבר חבר בפרויקט.',
   noPendingRequests: 'אין בקשות ממתינות.',
   projectPermissions: 'הרשאות פרויקט',
-  comingSoon: 'בקרוב – פיצ'ר זה יופיע בגרסה הבאה.',
+  comingSoon: "בקרוב – פיצ'ר זה יופיע בגרסה הבאה.",
   removeFromProject: 'הסר מפרויקט',
 
   login: 'התחברות',
@@ -172,7 +176,7 @@ export default {
   password: 'סיסמה',
   email: 'דוא"ל',
   fullName: 'שם מלא',
-  loginTitle: "התחברות – לק ב' מערכת בקרת מעבדה",
+  loginTitle: 'מערכת בקרת מעבדה',
   signupTitle: 'הרשמה – משתמשים כמו במטריה',
   loginButton: 'התחבר',
   signupButton: 'הירשם',

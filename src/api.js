@@ -68,6 +68,11 @@ export const projects = {
   removeMember: (id, userId) => api.delete(`/api/projects/${id}/members/${userId}`).then(r => r.data)
 };
 
+export const chat = {
+  list: (projectId) => api.get(`/api/projects/${projectId}/chat`).then(r => r.data),
+  send: (projectId, body) => api.post(`/api/projects/${projectId}/chat`, { body }).then(r => r.data)
+};
+
 export const tasks = {
   list: (projectId) => api.get(`/api/projects/${projectId}/tasks`).then(r => r.data),
   create: (projectId, body) => api.post(`/api/projects/${projectId}/tasks`, body).then(r => r.data),

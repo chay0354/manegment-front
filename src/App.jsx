@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Link, useParams, useNavigate, Navigate } from 'react-router-dom';
-import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth } from './api';
+import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, chat as chatApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth } from './api';
 import t from './strings';
 
 function Home({ user, onLogout }) {
@@ -14,6 +14,7 @@ function Home({ user, onLogout }) {
   const [requestProject, setRequestProject] = React.useState(null);
   const [requestSending, setRequestSending] = React.useState(false);
   const [creatingProject, setCreatingProject] = React.useState(false);
+  const [loadingProjectId, setLoadingProjectId] = React.useState(null);
   const navigate = useNavigate();
 
   React.useEffect(() => {
@@ -26,10 +27,15 @@ function Home({ user, onLogout }) {
   );
 
   const onProjectClick = (p) => {
-    projectsApi.getAccess(p.id).then(access => {
-      if (access.canAccess) navigate(`/project/${p.id}`);
-      else setRequestProject({ project: p, hasPendingRequest: access.hasPendingRequest });
-    }).catch(() => setRequestProject({ project: p, hasPendingRequest: false }));
+    if (loadingProjectId) return;
+    setLoadingProjectId(p.id);
+    projectsApi.getAccess(p.id)
+      .then(access => {
+        if (access.canAccess) navigate(`/project/${p.id}`);
+        else setRequestProject({ project: p, hasPendingRequest: access.hasPendingRequest });
+      })
+      .catch(() => setRequestProject({ project: p, hasPendingRequest: false }))
+      .finally(() => setLoadingProjectId(null));
   };
 
   const sendRequest = () => {
@@ -83,9 +89,15 @@ function Home({ user, onLogout }) {
         {!loading && (
           <div className="grid-2">
             {filteredProjects.map(p => (
-              <div key={p.id} className="project-card" onClick={() => onProjectClick(p)}>
-                <h3>{p.name}</h3>
-                <p>{p.description || t.noDescription}</p>
+              <div key={p.id} className={`project-card ${loadingProjectId === p.id ? 'project-card-loading' : ''}`} onClick={() => onProjectClick(p)}>
+                {loadingProjectId === p.id ? (
+                  <p className="loading" style={{ margin: 0 }}>{t.loading}</p>
+                ) : (
+                  <>
+                    <h3>{p.name}</h3>
+                    <p>{p.description || t.noDescription}</p>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -116,8 +128,8 @@ function Home({ user, onLogout }) {
   );
 }
 
-const TABS = ['overview', 'tasks', 'milestones', 'notes', 'rag', 'reports', 'activity', 'settings'];
-const TAB_LABELS = { overview: t.overview, tasks: t.tasks, milestones: t.milestones, notes: t.notes, rag: t.docsManagementTab, reports: t.reports, activity: t.activity, settings: t.settings };
+const TABS = ['overview', 'tasks', 'milestones', 'notes', 'rag', 'chat', 'settings'];
+const TAB_LABELS = { overview: `📊 ${t.overview}`, tasks: `📋 ${t.tasks}`, milestones: `🎯 ${t.milestones}`, notes: `📝 ${t.notes}`, rag: `📁 ${t.docsManagementTab}`, chat: `💬 ${t.chat}`, settings: `⚙️ ${t.settings}` };
 
 function ProjectView({ user, onLogout }) {
   const { id } = useParams();
@@ -171,8 +183,7 @@ function ProjectView({ user, onLogout }) {
           {tab === 'milestones' && <MilestonesTab projectId={id} />}
 {tab === 'notes' && <NotesTab projectId={id} />}
         {tab === 'rag' && <RagTab projectId={id} />}
-        {tab === 'reports' && <ReportsTab projectId={id} />}
-        {tab === 'activity' && <ActivityTab projectId={id} />}
+        {tab === 'chat' && <ChatTab projectId={id} />}
         {tab === 'settings' && <SettingsTab projectId={id} project={project} setProject={setProject} navigate={navigate} projectRole={projectRole} user={user} />}
         </div>
       </main>
@@ -809,20 +820,58 @@ function RagTab({ projectId }) {
   );
 }
 
-function ReportsTab({ projectId }) {
-  return (
-    <div className="card tab-card">
-      <h3>{t.reports}</h3>
-      <p style={{ color: 'var(--muted)' }}>{t.comingSoon}</p>
-    </div>
-  );
-}
+function ChatTab({ projectId }) {
+  const [messages, setMessages] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [input, setInput] = React.useState('');
+  const [sending, setSending] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const listRef = React.useRef(null);
 
-function ActivityTab({ projectId }) {
+  const load = () => {
+    chatApi.list(projectId)
+      .then(d => { setMessages(d.messages || []); setError(null); })
+      .catch(e => setError(e.response?.data?.error || e.message))
+      .finally(() => setLoading(false));
+  };
+  React.useEffect(() => { setLoading(true); load(); }, [projectId]);
+  React.useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [messages]);
+
+  const send = () => {
+    const text = (input || '').trim();
+    if (!text || sending) return;
+    setSending(true);
+    setError(null);
+    chatApi.send(projectId, text)
+      .then(msg => { setMessages(prev => [...prev, msg]); setInput(''); })
+      .catch(e => setError(e.response?.data?.error || e.message))
+      .finally(() => setSending(false));
+  };
+
+  const formatTime = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
-    <div className="card tab-card">
-      <h3>{t.activity}</h3>
-      <p style={{ color: 'var(--muted)' }}>{t.comingSoon}</p>
+    <div className="card tab-card chat-tab">
+      <h3>💬 {t.chat}</h3>
+      {error && <p className="error" style={{ marginBottom: 12 }}>{error}</p>}
+      <div ref={listRef} className="chat-messages" aria-live="polite">
+        {loading && <p className="loading">{t.loading}</p>}
+        {!loading && messages.length === 0 && <p className="loading">{t.noChatYet}</p>}
+        {!loading && messages.map(m => (
+          <div key={m.id} className="chat-message">
+            <span className="chat-message-meta">{m.username} · {formatTime(m.created_at)}</span>
+            <p className="chat-message-body">{m.body}</p>
+          </div>
+        ))}
+      </div>
+      <div className="chat-input-row">
+        <textarea value={input} onChange={e => setInput(e.target.value)} placeholder={t.chatPlaceholder} rows={2} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
+        <button type="button" onClick={send} disabled={sending || !input.trim()} className={sending ? 'btn-loading' : ''}>{sending ? t.loading : t.chatSend}</button>
+      </div>
     </div>
   );
 }
@@ -1124,7 +1173,6 @@ function LoginView({ onLogin }) {
       <main className="main" style={{ maxWidth: 420, margin: '40px auto' }}>
         <div className="card tab-card">
           <h2 className="page-title">{t.loginTitle}</h2>
-          <p style={{ color: 'var(--muted)', marginBottom: 20 }}>משתמשים באותה טבלת משתמשים כמו מטריה</p>
           {error && <p className="error">{error}</p>}
           <form onSubmit={submit}>
             <div className="form-group">
