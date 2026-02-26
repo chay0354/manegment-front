@@ -116,6 +116,14 @@ export const projectFiles = {
   delete: (projectId, fileId) => api.delete(`/api/projects/${projectId}/files/${fileId}`).then(r => r.data)
 };
 
+export const runs = {
+  list: (projectId, params) => api.get(`/api/projects/${projectId}/runs`, { params }).then(r => r.data),
+  get: (projectId, runId) => api.get(`/api/projects/${projectId}/runs/${runId}`).then(r => r.data),
+  create: (projectId, body) => api.post(`/api/projects/${projectId}/runs`, body).then(r => r.data),
+  update: (projectId, runId, body) => api.patch(`/api/projects/${projectId}/runs/${runId}`, body).then(r => r.data),
+  trace: (projectId, runId) => api.get(`/api/projects/${projectId}/runs/${runId}/trace`).then(r => r.data)
+};
+
 const RAG_RUN_TIMEOUT = 120000; // 2 min – research loop runs 4 agents
 
 export const rag = {

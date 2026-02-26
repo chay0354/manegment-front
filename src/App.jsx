@@ -696,15 +696,24 @@ function RagTab({ projectId }) {
     if (projectId) loadFiles();
   }, [projectId]);
 
-  const onFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const onFileChange = async (e) => {
+    const fileList = e.target.files;
+    if (!fileList?.length) return;
     setError(null);
     setUploading(true);
-    projectFilesApi.upload(projectId, file)
-      .then(() => { loadFiles(); e.target.value = ''; })
-      .catch(err => setError(err.response?.data?.error || err.message))
-      .finally(() => setUploading(false));
+    const files = Array.from(fileList);
+    const errors = [];
+    for (let i = 0; i < files.length; i++) {
+      try {
+        await projectFilesApi.upload(projectId, files[i]);
+      } catch (err) {
+        errors.push(files[i].name + ': ' + (err.response?.data?.error || err.message));
+      }
+    }
+    e.target.value = '';
+    setUploading(false);
+    loadFiles();
+    if (errors.length) setError(errors.length === files.length ? errors.join('; ') : t.uploadSomeFailed + ' ' + errors.join('; '));
   };
 
   const removeFile = (fileId) => {
@@ -768,6 +777,7 @@ function RagTab({ projectId }) {
           <input
             id="rag-file-upload"
             type="file"
+            multiple
             accept=".pdf,.docx,.doc,.txt,.xlsx,.xls"
             onChange={onFileChange}
             className="rag-file-input-hidden"
@@ -775,7 +785,7 @@ function RagTab({ projectId }) {
             tabIndex={-1}
           />
           <label htmlFor="rag-file-upload" className="rag-file-button">
-            {t.chooseFile}
+            {t.chooseFileMultiple}
           </label>
           {uploading && <span className="loading">{t.uploading}</span>}
         </div>
