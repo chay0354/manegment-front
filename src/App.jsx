@@ -722,7 +722,11 @@ function RagTab({ projectId }) {
     ragApi.researchSession()
       .then(session => {
         body.session_id = session.session_id;
-        if (selectedFilename) body.filename = selectedFilename;
+        if (selectedFilename) {
+          body.filename = selectedFilename;
+        } else if (projectFiles.length > 0) {
+          body.filenames = projectFiles.map(f => f.original_name);
+        }
         return ragApi.researchRun(body);
       })
       .then(data => {
