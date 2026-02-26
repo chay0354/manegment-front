@@ -731,9 +731,16 @@ function RagTab({ projectId }) {
       })
       .then(data => {
         const out = data.outputs || {};
-        setResult(out.synthesis || out.research || out.analysis || JSON.stringify(data, null, 2));
+        const text = (out.synthesis || out.research || out.analysis || '').trim();
+        if (text) {
+          setResult(text);
+        } else if (data.run_id != null) {
+          setResult('לא נוצר טקסט. ייתכן שהמודל לא זמין או החזיר תשובה ריקה. נסה שוב או בדוק את הגדרות LLM ב-Matriya.');
+        } else {
+          setResult(JSON.stringify(data, null, 2));
+        }
       })
-      .catch(e => setError(e.response?.data?.error || e.message))
+      .catch(e => setError(e.response?.data?.error || e.message || (e.code === 'ECONNABORTED' ? 'הבקשה ארכה יותר מדי – נסה שוב.' : 'שגיאה בביצוע השאילתה.')))
       .finally(() => setLoading(false));
   };
 
