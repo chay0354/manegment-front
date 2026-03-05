@@ -113,7 +113,27 @@ export const projectFiles = {
     if (token) headers.Authorization = `Bearer ${token}`;
     return axios.post(`${API_BASE}/api/projects/${projectId}/files`, form, { timeout: 120000, headers }).then(r => r.data);
   },
-  delete: (projectId, fileId) => api.delete(`/api/projects/${projectId}/files/${fileId}`).then(r => r.data)
+  delete: (projectId, fileId) => api.delete(`/api/projects/${projectId}/files/${fileId}`).then(r => r.data),
+  download: async (projectId, fileId, filename) => {
+    const token = getStoredToken();
+    const r = await axios.get(`${API_BASE}/api/projects/${projectId}/files/${fileId}/download`, { responseType: 'blob', validateStatus: () => true, headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (r.status !== 200) {
+      const blob = r.data;
+      let msg = 'Download failed';
+      if (blob && (blob.type || '').startsWith('application/json')) {
+        try { const j = JSON.parse(await blob.text()); msg = j.error || msg; } catch (_) {}
+      }
+      throw Object.assign(new Error(msg), { response: { data: { error: msg } } });
+    }
+    const url = URL.createObjectURL(r.data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'download';
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  listSharepointBucket: (projectId) => api.get(`/api/projects/${projectId}/files/sharepoint-bucket`).then(r => r.data),
+  addFromBucket: (projectId, path, displayName) => api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName }).then(r => r.data)
 };
 
 export const runs = {

@@ -686,6 +686,11 @@ function RagTab({ projectId }) {
   const [selectedFilename, setSelectedFilename] = React.useState('');
   const [actionMessage, setActionMessage] = React.useState(null);
   const [removingFileId, setRemovingFileId] = React.useState(null);
+  const [showSharepointPicker, setShowSharepointPicker] = React.useState(false);
+  const [sharepointBucketFiles, setSharepointBucketFiles] = React.useState([]);
+  const [sharepointBucketLoading, setSharepointBucketLoading] = React.useState(false);
+  const [sharepointSearchQuery, setSharepointSearchQuery] = React.useState('');
+  const [addingFromBucket, setAddingFromBucket] = React.useState(null);
 
   const loadFiles = () => projectFilesApi.list(projectId).then(d => { setProjectFiles(d.files || []); setFilesLoading(false); });
 
@@ -774,6 +779,18 @@ function RagTab({ projectId }) {
         <h4 id="docs-upload-heading" style={{ fontSize: '1rem', marginBottom: 8 }}>{t.docsUploadSection}</h4>
         <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: 12 }}>{t.docsUploadHint}</p>
         <div className="flex gap" style={{ marginBottom: 16, alignItems: 'center' }}>
+          <button
+            type="button"
+            className="rag-file-button"
+            onClick={() => {
+              setSharepointSearchQuery('');
+              setShowSharepointPicker(true);
+              setSharepointBucketLoading(true);
+              projectFilesApi.listSharepointBucket(projectId).then(d => { setSharepointBucketFiles(d.files || []); setSharepointBucketLoading(false); }).catch(() => { setSharepointBucketLoading(false); setSharepointBucketFiles([]); });
+            }}
+          >
+            {t.chooseFromSharepoint}
+          </button>
           <input
             id="rag-file-upload"
             type="file"
@@ -789,6 +806,46 @@ function RagTab({ projectId }) {
           </label>
           {uploading && <span className="loading">{t.uploading}</span>}
         </div>
+        {showSharepointPicker && (
+          <div className="modal-overlay" onClick={() => setShowSharepointPicker(false)} role="dialog" aria-modal="true" aria-label={t.sharepointBucketList}>
+            <div className="modal card" onClick={e => e.stopPropagation()} style={{ maxWidth: 520, maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              <div className="flex gap" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h4 style={{ margin: 0 }}>{t.sharepointBucketList}</h4>
+                <button type="button" className="secondary" onClick={() => setShowSharepointPicker(false)}>×</button>
+              </div>
+              {!sharepointBucketLoading && sharepointBucketFiles.length > 0 && (
+                <input
+                  type="search"
+                  className="form-control"
+                  placeholder={t.searchSharepointFiles}
+                  value={sharepointSearchQuery}
+                  onChange={e => setSharepointSearchQuery(e.target.value)}
+                  style={{ marginBottom: 12 }}
+                  aria-label={t.searchSharepointFiles}
+                />
+              )}
+              <div className="modal-scroll" style={{ overflow: 'auto', flex: 1, minHeight: 200 }}>
+                {sharepointBucketLoading && <p className="loading">{t.loadingSharepointFiles}</p>}
+                {!sharepointBucketLoading && sharepointBucketFiles.length === 0 && <p className="muted">{t.noSharepointFiles}</p>}
+                {!sharepointBucketLoading && sharepointBucketFiles.length > 0 && (() => {
+                  const q = sharepointSearchQuery.trim().toLowerCase();
+                  const filtered = q ? sharepointBucketFiles.filter(f => (f.displayName || f.name || '').toLowerCase().includes(q)) : sharepointBucketFiles;
+                  if (filtered.length === 0) return <p className="muted">{t.noSharepointFiles}</p>;
+                  return (
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                      {filtered.map(f => (
+                        <li key={f.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.path}>{f.displayName || f.name}</span>
+                          <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); projectFilesApi.addFromBucket(projectId, f.path, f.displayName || f.name).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="rag-section" aria-labelledby="docs-list-heading">
@@ -801,7 +858,7 @@ function RagTab({ projectId }) {
               <div key={f.id} className="list-item">
                 <span>{f.original_name}</span>
                 <div className="flex gap">
-                  <button type="button" className="secondary" title={t.downloadNotAvailable} disabled>{t.download}</button>
+                  <button type="button" className="secondary" title={f.storage_path ? t.download : t.downloadNotAvailable} disabled={!f.storage_path} onClick={() => f.storage_path && projectFilesApi.download(projectId, f.id, f.original_name).catch(err => setError(err.response?.data?.error || err.message))}>{t.download}</button>
                   <button type="button" className={`secondary ${removingFileId === f.id ? 'btn-loading' : ''}`} onClick={() => removeFile(f.id)} disabled={removingFileId === f.id}>{removingFileId === f.id ? t.loading : t.remove}</button>
                 </div>
               </div>
