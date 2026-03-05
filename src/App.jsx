@@ -688,8 +688,10 @@ function RagTab({ projectId }) {
   const [removingFileId, setRemovingFileId] = React.useState(null);
   const [showSharepointPicker, setShowSharepointPicker] = React.useState(false);
   const [sharepointBucketFiles, setSharepointBucketFiles] = React.useState([]);
+  const [sharepointDisplayNamesMap, setSharepointDisplayNamesMap] = React.useState({});
   const [sharepointBucketLoading, setSharepointBucketLoading] = React.useState(false);
   const [sharepointSearchQuery, setSharepointSearchQuery] = React.useState('');
+  const [sharepointExpandedFolders, setSharepointExpandedFolders] = React.useState(() => new Set());
   const [addingFromBucket, setAddingFromBucket] = React.useState(null);
 
   const loadFiles = () => projectFilesApi.list(projectId).then(d => { setProjectFiles(d.files || []); setFilesLoading(false); });
@@ -725,6 +727,52 @@ function RagTab({ projectId }) {
     if (!window.confirm(t.removeFileConfirm)) return;
     setRemovingFileId(fileId);
     projectFilesApi.delete(projectId, fileId).then(loadFiles).catch(err => setError(err.message)).finally(() => setRemovingFileId(null));
+  };
+
+  function buildBucketTree(files) {
+    const root = { type: 'folder', pathPrefix: '', children: [] };
+    const pathToFolder = new Map();
+    pathToFolder.set('', root);
+    for (const f of files) {
+      const path = f.path || '';
+      const parts = path.split('/').filter(Boolean);
+      if (parts.length === 0) continue;
+      let prefix = '';
+      for (let i = 0; i < parts.length - 1; i++) {
+        const segment = parts[i];
+        const nextPrefix = prefix ? `${prefix}/${segment}` : segment;
+        if (!pathToFolder.has(nextPrefix)) {
+          const folder = { type: 'folder', name: segment, pathPrefix: nextPrefix, children: [] };
+          pathToFolder.set(nextPrefix, folder);
+          const parent = pathToFolder.get(prefix);
+          if (parent && parent.children) parent.children.push(folder);
+        }
+        prefix = prefix ? `${prefix}/${segment}` : segment;
+      }
+      const fileNode = { type: 'file', path: f.path, name: parts[parts.length - 1], displayName: f.displayName || f.name };
+      const parent = pathToFolder.get(prefix);
+      if (parent && parent.children) parent.children.push(fileNode);
+    }
+    const sortNodes = (nodes) => {
+      nodes.sort((a, b) => {
+        const aIsFolder = a.type === 'folder' ? 1 : 0;
+        const bIsFolder = b.type === 'folder' ? 1 : 0;
+        if (bIsFolder !== aIsFolder) return bIsFolder - aIsFolder;
+        return String(a.name || a.pathPrefix).localeCompare(String(b.name || b.pathPrefix), undefined, { sensitivity: 'base' });
+      });
+      nodes.forEach(n => { if (n.children) sortNodes(n.children); });
+    };
+    sortNodes(root.children);
+    return root.children;
+  }
+
+  const toggleBucketFolder = (pathPrefix) => {
+    setSharepointExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(pathPrefix)) next.delete(pathPrefix);
+      else next.add(pathPrefix);
+      return next;
+    });
   };
 
   const runSearch = () => {
@@ -789,7 +837,7 @@ function RagTab({ projectId }) {
               setSharepointSearchQuery('');
               setShowSharepointPicker(true);
               setSharepointBucketLoading(true);
-              projectFilesApi.listSharepointBucket(projectId).then(d => { setSharepointBucketFiles(d.files || []); setSharepointBucketLoading(false); }).catch(() => { setSharepointBucketLoading(false); setSharepointBucketFiles([]); });
+              projectFilesApi.listSharepointBucket(projectId).then(d => { setSharepointBucketFiles(d.files || []); setSharepointDisplayNamesMap(d.displayNamesMap || {}); setSharepointBucketLoading(false); }).catch(() => { setSharepointBucketLoading(false); setSharepointBucketFiles([]); setSharepointDisplayNamesMap({}); });
             }}
           >
             {t.chooseFromSharepoint}
@@ -832,16 +880,49 @@ function RagTab({ projectId }) {
                 {!sharepointBucketLoading && sharepointBucketFiles.length === 0 && <p className="muted">{t.noSharepointFiles}</p>}
                 {!sharepointBucketLoading && sharepointBucketFiles.length > 0 && (() => {
                   const q = sharepointSearchQuery.trim().toLowerCase();
-                  const filtered = q ? sharepointBucketFiles.filter(f => (f.displayName || f.name || '').toLowerCase().includes(q)) : sharepointBucketFiles;
+                  const filtered = q ? sharepointBucketFiles.filter(f => (f.displayName || f.name || f.path || '').toLowerCase().includes(q)) : sharepointBucketFiles;
                   if (filtered.length === 0) return <p className="muted">{t.noSharepointFiles}</p>;
+                  const isSearch = !!q;
+                  function renderBucketNode(node, depth = 0) {
+                    if (node.type === 'file') {
+                      return (
+                        <li key={node.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)', paddingRight: depth * 16 }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }} title={node.path}>{node.displayName || node.name}</span>
+                          <button type="button" className="secondary" disabled={addingFromBucket === node.path} onClick={() => { setAddingFromBucket(node.path); projectFilesApi.addFromBucket(projectId, node.path, node.displayName || node.name).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
+                        </li>
+                      );
+                    }
+                    const expanded = sharepointExpandedFolders.has(node.pathPrefix);
+                    return (
+                      <li key={node.pathPrefix || node.name} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                        <button type="button" className="secondary" style={{ width: '100%', justifyContent: 'flex-start', textAlign: 'right', marginBottom: 4, padding: '6px 8px', background: 'var(--bg)' }} onClick={() => toggleBucketFolder(node.pathPrefix)} aria-expanded={expanded}>
+                          <span style={{ marginLeft: 8 }}>{expanded ? '▼' : '▶'}</span>
+                          <span style={{ marginRight: 6 }}>{sharepointDisplayNamesMap[node.pathPrefix] || node.name}</span>
+                        </button>
+                        {expanded && node.children && node.children.length > 0 && (
+                          <ul style={{ listStyle: 'none', padding: 0, margin: 0, borderRight: '1px solid var(--border)', marginRight: 8 }}>
+                            {node.children.map(child => renderBucketNode(child, depth + 1))}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  }
+                  if (isSearch) {
+                    return (
+                      <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                        {filtered.map(f => (
+                          <li key={f.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.path}>{f.displayName || f.name}</span>
+                            <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); projectFilesApi.addFromBucket(projectId, f.path, f.displayName || f.name).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
+                          </li>
+                        ))}
+                      </ul>
+                    );
+                  }
+                  const tree = buildBucketTree(filtered);
                   return (
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                      {filtered.map(f => (
-                        <li key={f.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.path}>{f.displayName || f.name}</span>
-                          <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); projectFilesApi.addFromBucket(projectId, f.path, f.displayName || f.name).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
-                        </li>
-                      ))}
+                      {tree.map(node => renderBucketNode(node))}
                     </ul>
                   );
                 })()}

@@ -97,6 +97,7 @@ export default {
   loadingSharepointFiles: 'טוען רשימה...',
   noSharepointFiles: 'אין קבצים בדלי.',
   searchSharepointFiles: 'חיפוש קבצים...',
+  folder: 'תיקייה',
   uploading: 'מעלה...',
   uploadSomeFailed: 'חלק מההעלאות נכשלו:',
   remove: 'הסר',
