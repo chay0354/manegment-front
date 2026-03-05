@@ -40,6 +40,20 @@ api.interceptors.request.use(config => {
   return config;
 });
 
+api.interceptors.response.use(
+  r => r,
+  err => {
+    if (err.response?.status === 401) {
+      const url = err.config?.url || '';
+      if (!url.includes('/api/auth/login') && !url.includes('/api/auth/signup') && !url.includes('/api/auth/me')) {
+        clearAuth();
+        window.location.replace('/login');
+      }
+    }
+    return Promise.reject(err);
+  }
+);
+
 export const auth = {
   login: (username, password) =>
     api.post('/api/auth/login', { username, password }).then(r => r.data),

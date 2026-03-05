@@ -782,7 +782,10 @@ function RagTab({ projectId }) {
           <button
             type="button"
             className="rag-file-button"
+            disabled={!health?.ok}
+            title={!health?.ok ? t.matriyaNotSet : undefined}
             onClick={() => {
+              if (!health?.ok) return;
               setSharepointSearchQuery('');
               setShowSharepointPicker(true);
               setSharepointBucketLoading(true);
