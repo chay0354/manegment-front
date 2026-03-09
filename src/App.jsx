@@ -695,7 +695,6 @@ function RagTab({ projectId }) {
   const [addingFromBucket, setAddingFromBucket] = React.useState(null);
   const [showSharepointUploadModal, setShowSharepointUploadModal] = React.useState(false);
   const [sharepointUploadFiles, setSharepointUploadFiles] = React.useState([]);
-  const [sharepointUploadFolderPath, setSharepointUploadFolderPath] = React.useState('');
   const [sharepointUploading, setSharepointUploading] = React.useState(false);
 
   const loadFiles = () => projectFilesApi.list(projectId).then(d => { setProjectFiles(d.files || []); setFilesLoading(false); });
@@ -846,15 +845,6 @@ function RagTab({ projectId }) {
           >
             {t.chooseFromSharepoint}
           </button>
-          <button
-            type="button"
-            className="rag-file-button"
-            disabled={!health?.ok}
-            title={!health?.ok ? t.matriyaNotSet : undefined}
-            onClick={() => { if (!health?.ok) return; setSharepointUploadFiles([]); setSharepointUploadFolderPath(''); setShowSharepointUploadModal(true); }}
-          >
-            {t.uploadToSharepoint}
-          </button>
           <input
             id="rag-file-upload"
             type="file"
@@ -875,7 +865,10 @@ function RagTab({ projectId }) {
             <div className="modal card" onClick={e => e.stopPropagation()} style={{ maxWidth: 520, maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <div className="flex gap" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h4 style={{ margin: 0 }}>{t.sharepointBucketList}</h4>
-                <button type="button" className="secondary" onClick={() => setShowSharepointPicker(false)}>×</button>
+                <div className="flex gap" style={{ alignItems: 'center' }}>
+                  <button type="button" className="rag-file-button" onClick={() => { setSharepointUploadFiles([]); setShowSharepointUploadModal(true); }}>{t.uploadToSharepointManual}</button>
+                  <button type="button" className="secondary" onClick={() => setShowSharepointPicker(false)}>×</button>
+                </div>
               </div>
               {!sharepointBucketLoading && sharepointBucketFiles.length > 0 && (
                 <input
@@ -950,16 +943,6 @@ function RagTab({ projectId }) {
                 <h4 style={{ margin: 0 }}>{t.uploadToSharepoint}</h4>
                 <button type="button" className="secondary" disabled={sharepointUploading} onClick={() => setShowSharepointUploadModal(false)}>×</button>
               </div>
-              <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: 12 }}>{t.sharepointFolderPath}</p>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="e.g. Reports/2024"
-                value={sharepointUploadFolderPath}
-                onChange={e => setSharepointUploadFolderPath(e.target.value)}
-                style={{ marginBottom: 12 }}
-                dir="ltr"
-              />
               <input
                 type="file"
                 multiple
@@ -985,7 +968,7 @@ function RagTab({ projectId }) {
                 <button type="button" disabled={sharepointUploadFiles.length === 0 || sharepointUploading} onClick={() => {
                   setSharepointUploading(true);
                   setError(null);
-                  projectFilesApi.uploadToSharepointBucket(projectId, sharepointUploadFiles, sharepointUploadFolderPath.trim())
+                  projectFilesApi.uploadToSharepointBucket(projectId, sharepointUploadFiles, '')
                     .then(res => {
                       setActionMessage(res.failed > 0 ? t.sharepointUploadSomeFailed : t.sharepointUploadSuccess);
                       setTimeout(() => setActionMessage(null), 3000);

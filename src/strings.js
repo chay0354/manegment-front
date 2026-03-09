@@ -93,6 +93,7 @@ export default {
   chooseFileMultiple: 'העלה קבצים מהמחשב שלך',
   chooseFromSharepoint: 'בחר קבצים מ-SharePoint',
   uploadToSharepoint: 'העלה קבצים/תיקיות ל-SharePoint',
+  uploadToSharepointManual: 'העלה קובץ או תיקייה ידנית',
   sharepointFolderPath: 'נתיב תיקייה (אופציונלי)',
   sharepointUploadSuccess: 'הקבצים הועלו ל-SharePoint.',
   sharepointUploadSomeFailed: 'חלק מהקבצים לא הועלו.',
