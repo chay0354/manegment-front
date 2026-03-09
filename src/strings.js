@@ -95,6 +95,7 @@ export default {
   uploadToSharepoint: 'העלה קבצים/תיקיות ל-SharePoint',
   uploadToSharepointManual: 'העלה קובץ או תיקייה ידנית',
   sharepointFolderPath: 'נתיב תיקייה (אופציונלי)',
+  sharepointFolderName: 'שם תיקייה (לכמה קבצים)',
   sharepointUploadSuccess: 'הקבצים הועלו ל-SharePoint.',
   sharepointUploadSomeFailed: 'חלק מהקבצים לא הועלו.',
   sharepointBucketList: 'קבצים מ-SharePoint',
