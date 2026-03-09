@@ -693,6 +693,10 @@ function RagTab({ projectId }) {
   const [sharepointSearchQuery, setSharepointSearchQuery] = React.useState('');
   const [sharepointExpandedFolders, setSharepointExpandedFolders] = React.useState(() => new Set());
   const [addingFromBucket, setAddingFromBucket] = React.useState(null);
+  const [showSharepointUploadModal, setShowSharepointUploadModal] = React.useState(false);
+  const [sharepointUploadFiles, setSharepointUploadFiles] = React.useState([]);
+  const [sharepointUploadFolderPath, setSharepointUploadFolderPath] = React.useState('');
+  const [sharepointUploading, setSharepointUploading] = React.useState(false);
 
   const loadFiles = () => projectFilesApi.list(projectId).then(d => { setProjectFiles(d.files || []); setFilesLoading(false); });
 
@@ -842,6 +846,15 @@ function RagTab({ projectId }) {
           >
             {t.chooseFromSharepoint}
           </button>
+          <button
+            type="button"
+            className="rag-file-button"
+            disabled={!health?.ok}
+            title={!health?.ok ? t.matriyaNotSet : undefined}
+            onClick={() => { if (!health?.ok) return; setSharepointUploadFiles([]); setSharepointUploadFolderPath(''); setShowSharepointUploadModal(true); }}
+          >
+            {t.uploadToSharepoint}
+          </button>
           <input
             id="rag-file-upload"
             type="file"
@@ -926,6 +939,66 @@ function RagTab({ projectId }) {
                     </ul>
                   );
                 })()}
+              </div>
+            </div>
+          </div>
+        )}
+        {showSharepointUploadModal && (
+          <div className="modal-overlay" onClick={() => !sharepointUploading && setShowSharepointUploadModal(false)} role="dialog" aria-modal="true" aria-label={t.uploadToSharepoint}>
+            <div className="modal card" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+              <div className="flex gap" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h4 style={{ margin: 0 }}>{t.uploadToSharepoint}</h4>
+                <button type="button" className="secondary" disabled={sharepointUploading} onClick={() => setShowSharepointUploadModal(false)}>×</button>
+              </div>
+              <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: 12 }}>{t.sharepointFolderPath}</p>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="e.g. Reports/2024"
+                value={sharepointUploadFolderPath}
+                onChange={e => setSharepointUploadFolderPath(e.target.value)}
+                style={{ marginBottom: 12 }}
+                dir="ltr"
+              />
+              <input
+                type="file"
+                multiple
+                id="sharepoint-upload-files"
+                className="rag-file-input-hidden"
+                onChange={e => { const list = e.target.files; setSharepointUploadFiles(list ? Array.from(list) : []); e.target.value = ''; }}
+              />
+              <input
+                type="file"
+                multiple
+                webkitDirectory
+                id="sharepoint-upload-folder"
+                className="rag-file-input-hidden"
+                onChange={e => { const list = e.target.files; setSharepointUploadFiles(list ? Array.from(list) : []); e.target.value = ''; }}
+              />
+              <div className="flex gap" style={{ marginBottom: 12 }}>
+                <label htmlFor="sharepoint-upload-files" className="rag-file-button" style={{ display: 'inline-block' }}>בחר קבצים</label>
+                <label htmlFor="sharepoint-upload-folder" className="rag-file-button" style={{ display: 'inline-block' }}>בחר תיקייה</label>
+              </div>
+              {sharepointUploadFiles.length > 0 && <p className="muted" style={{ marginBottom: 12 }}>{sharepointUploadFiles.length} קבצים נבחרו</p>}
+              <div className="flex gap">
+                <button type="button" className="secondary" onClick={() => setShowSharepointUploadModal(false)} disabled={sharepointUploading}>ביטול</button>
+                <button type="button" disabled={sharepointUploadFiles.length === 0 || sharepointUploading} onClick={() => {
+                  setSharepointUploading(true);
+                  setError(null);
+                  projectFilesApi.uploadToSharepointBucket(projectId, sharepointUploadFiles, sharepointUploadFolderPath.trim())
+                    .then(res => {
+                      setActionMessage(res.failed > 0 ? t.sharepointUploadSomeFailed : t.sharepointUploadSuccess);
+                      setTimeout(() => setActionMessage(null), 3000);
+                      setShowSharepointUploadModal(false);
+                      setSharepointUploadFiles([]);
+                      if (showSharepointPicker) {
+                        setSharepointBucketLoading(true);
+                        projectFilesApi.listSharepointBucket(projectId).then(d => { setSharepointBucketFiles(d.files || []); setSharepointDisplayNamesMap(d.displayNamesMap || {}); setSharepointBucketLoading(false); }).catch(() => setSharepointBucketLoading(false));
+                      }
+                    })
+                    .catch(err => setError(err.response?.data?.error || err.message))
+                    .finally(() => setSharepointUploading(false));
+                }}>{sharepointUploading ? t.uploading : 'העלה'}</button>
               </div>
             </div>
           </div>

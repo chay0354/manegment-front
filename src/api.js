@@ -147,7 +147,14 @@ export const projectFiles = {
     URL.revokeObjectURL(url);
   },
   listSharepointBucket: (projectId) => api.get(`/api/projects/${projectId}/files/sharepoint-bucket`).then(r => r.data),
-  addFromBucket: (projectId, path, displayName) => api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName }).then(r => r.data)
+  addFromBucket: (projectId, path, displayName) => api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName }).then(r => r.data),
+  uploadToSharepointBucket: (projectId, files, folderPath = '') => {
+    const form = new FormData();
+    if (folderPath) form.append('folderPath', folderPath);
+    for (let i = 0; i < files.length; i++) form.append('files', files[i], files[i].name || files[i].webkitRelativePath || `file-${i}`);
+    const token = getStoredToken();
+    return axios.post(`${API_BASE}/api/projects/${projectId}/files/upload-to-sharepoint-bucket`, form, { timeout: 120000, headers: token ? { Authorization: `Bearer ${token}` } : {} }).then(r => r.data);
+  }
 };
 
 export const runs = {
