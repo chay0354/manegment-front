@@ -1131,13 +1131,23 @@ function RagTab({ projectId }) {
               projectFilesApi.listSharepointBucket(projectId).then(d => {
                 const files = d.files || [];
                 const displayNamesMap = d.displayNamesMap || {};
+                const mapKeys = Object.keys(displayNamesMap);
+                console.log('[SharePoint decode] list response:', { filesCount: files.length, displayNamesMapKeys: mapKeys.length, sampleMapKeys: mapKeys.slice(0, 5) });
+                const manualFiles = files.filter(f => (f.path || '').startsWith('manual/'));
+                manualFiles.slice(0, 10).forEach(f => {
+                  console.log('[SharePoint decode] file:', f.path, '| displayName from API:', JSON.stringify(f.displayName), '| in map:', f.path in displayNamesMap, '| map value:', JSON.stringify(displayNamesMap[f.path]));
+                });
+                if (manualFiles.length > 10) console.log('[SharePoint decode] ... and', manualFiles.length - 10, 'more manual files');
                 setSharepointBucketFiles(files);
                 setSharepointDisplayNamesMap(displayNamesMap);
                 setSharepointBucketLoading(false);
                 // Auto-expand "manual" so uploaded files (with Hebrew/English display names) are visible
                 const hasManual = files.some(f => (f.path || '').startsWith('manual/'));
                 if (hasManual) setSharepointExpandedFolders(prev => new Set(prev).add('manual'));
-              }).catch(() => { setSharepointBucketLoading(false); setSharepointBucketFiles([]); setSharepointDisplayNamesMap({}); });
+              }).catch(err => {
+                console.warn('[SharePoint decode] list failed:', err);
+                setSharepointBucketLoading(false); setSharepointBucketFiles([]); setSharepointDisplayNamesMap({});
+              });
             }}
           >
             {t.chooseFromSharepoint}
@@ -1190,10 +1200,14 @@ function RagTab({ projectId }) {
                     const pathKey = node.path || node.pathPrefix || '';
                     const displayFromMap = sharepointDisplayNamesMap[pathKey];
                     const display = displayFromMap ?? node.displayName;
+                    const finalDisplay = safeDisplayName(display, node.path, node.name);
+                    if (node.type === 'file' && pathKey.startsWith('manual/')) {
+                      console.log('[SharePoint decode] render file:', pathKey, '| displayFromMap:', JSON.stringify(displayFromMap), '| node.displayName:', JSON.stringify(node.displayName), '| final:', JSON.stringify(finalDisplay));
+                    }
                     if (node.type === 'file') {
                       return (
                         <li key={node.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)', paddingRight: depth * 16 }}>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }} title={node.path}>{safeDisplayName(display, node.path, node.name)}</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }} title={node.path}>{finalDisplay}</span>
                           <button type="button" className="secondary" disabled={addingFromBucket === node.path} onClick={() => { setAddingFromBucket(node.path); projectFilesApi.addFromBucket(projectId, node.path, safeDisplayName(display, node.path, node.name)).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
                         </li>
                       );
