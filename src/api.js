@@ -148,7 +148,7 @@ export const projectFiles = {
     a.click();
     URL.revokeObjectURL(url);
   },
-  listSharepointBucket: (projectId) => api.get(`/api/projects/${projectId}/files/sharepoint-bucket`).then(r => r.data),
+  listSharepointBucket: (projectId) => api.get(`/api/projects/${projectId}/files/sharepoint-bucket`, { params: { _: Date.now() } }).then(r => r.data),
   addFromBucket: (projectId, path, displayName) => api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName }).then(r => r.data),
   /** Upload via backend. Sends fileNames as JSON + base64 so Hebrew/Unicode names are preserved (multipart can corrupt them). Uses api so auth token is always attached. */
   uploadToSharepointBucket: (projectId, files, folderPath = '') => {
