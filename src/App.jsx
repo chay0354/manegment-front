@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Link, useParams, useNavigate, Navigate } from 'react-router-dom';
-import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, chat as chatApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth } from './api';
+import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, chat as chatApi, lab as labApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth } from './api';
 import t from './strings';
 
 function Home({ user, onLogout }) {
@@ -128,8 +128,8 @@ function Home({ user, onLogout }) {
   );
 }
 
-const TABS = ['overview', 'tasks', 'milestones', 'notes', 'rag', 'chat', 'settings'];
-const TAB_LABELS = { overview: `📊 ${t.overview}`, tasks: `📋 ${t.tasks}`, milestones: `🎯 ${t.milestones}`, notes: `📝 ${t.notes}`, rag: `📁 ${t.docsManagementTab}`, chat: `💬 ${t.chat}`, settings: `⚙️ ${t.settings}` };
+const TABS = ['overview', 'tasks', 'milestones', 'notes', 'lab', 'rag', 'chat', 'settings'];
+const TAB_LABELS = { overview: `📊 ${t.overview}`, tasks: `📋 ${t.tasks}`, milestones: `🎯 ${t.milestones}`, notes: `📝 ${t.notes}`, lab: `🧪 ${t.labTab}`, rag: `📁 ${t.docsManagementTab}`, chat: `💬 ${t.chat}`, settings: `⚙️ ${t.settings}` };
 
 function ProjectView({ user, onLogout }) {
   const { id } = useParams();
@@ -182,6 +182,7 @@ function ProjectView({ user, onLogout }) {
           {tab === 'tasks' && <TasksTab projectId={id} />}
           {tab === 'milestones' && <MilestonesTab projectId={id} />}
 {tab === 'notes' && <NotesTab projectId={id} />}
+        {tab === 'lab' && <LabTab projectId={id} />}
         {tab === 'rag' && <RagTab projectId={id} />}
         {tab === 'chat' && <ChatTab projectId={id} />}
         {tab === 'settings' && <SettingsTab projectId={id} project={project} setProject={setProject} navigate={navigate} projectRole={projectRole} user={user} />}
@@ -674,6 +675,193 @@ function NotesTab({ projectId }) {
   );
 }
 
+function LabTab({ projectId }) {
+  const [experiments, setExperiments] = React.useState([]);
+  const [sessions, setSessions] = React.useState([]);
+  const [materials, setMaterials] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+  const [contradictions, setContradictions] = React.useState(null);
+  const [failurePatterns, setFailurePatterns] = React.useState(null);
+  const [snapshot, setSnapshot] = React.useState(null);
+  const [relations, setRelations] = React.useState(null);
+  const [insights, setInsights] = React.useState(null);
+  const [formulaValidateInput, setFormulaValidateInput] = React.useState('');
+  const [formulaValidateResult, setFormulaValidateResult] = React.useState(null);
+  const [guardInput, setGuardInput] = React.useState('');
+  const [guardResult, setGuardResult] = React.useState(null);
+  const [formulationInput, setFormulationInput] = React.useState('');
+  const [formulationResult, setFormulationResult] = React.useState(null);
+  const [similarExperimentId, setSimilarExperimentId] = React.useState('');
+  const [similarResult, setSimilarResult] = React.useState(null);
+  const [activeSection, setActiveSection] = React.useState('insights');
+
+  const load = () => {
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      labApi.experiments(projectId),
+      labApi.researchSessions(projectId),
+      labApi.materialLibrary(projectId)
+    ]).then(([eRes, sRes, mRes]) => {
+      setExperiments(eRes.experiments || []);
+      setSessions(sRes.sessions || []);
+      setMaterials(mRes.materials || []);
+      setLoading(false);
+    }).catch(err => { setError(err.response?.data?.error || err.message); setLoading(false); });
+  };
+  React.useEffect(() => { if (projectId) load(); }, [projectId]);
+  React.useEffect(() => { if (projectId && activeSection === 'insights' && !insights) loadInsights(); }, [projectId, activeSection]);
+
+  const loadContradictions = () => labApi.analysis.contradictions(projectId).then(d => setContradictions(d)).catch(() => setContradictions({ contradictions: [] }));
+  const loadFailurePatterns = () => labApi.analysis.failurePatterns(projectId).then(d => setFailurePatterns(d)).catch(() => setFailurePatterns(null));
+  const loadSnapshot = () => labApi.analysis.researchSnapshot(projectId).then(d => setSnapshot(d)).catch(() => setSnapshot(null));
+  const loadRelations = () => labApi.analysis.relations(projectId).then(d => setRelations(d)).catch(() => setRelations(null));
+  const loadInsights = () => labApi.analysis.insights(projectId).then(d => setInsights(d)).catch(() => setInsights(null));
+
+  const runFormulaValidate = () => {
+    setFormulaValidateResult(null);
+    labApi.analysis.formulaValidate(projectId, { formula: formulaValidateInput }).then(d => setFormulaValidateResult(d)).catch(err => setFormulaValidateResult({ valid: false, errors: [err.response?.data?.error || err.message] }));
+  };
+  const runGuard = () => {
+    setGuardResult(null);
+    labApi.guard(projectId, { formula: guardInput }).then(d => setGuardResult(d)).catch(err => setGuardResult({ allowed: false, warnings: [{ message: err.response?.data?.error || err.message }] }));
+  };
+  const runFormulationIntelligence = () => {
+    setFormulationResult(null);
+    const body = { formula: formulationInput };
+    try {
+      const parsed = formulationInput.trim() ? JSON.parse(formulationInput) : {};
+      if (typeof parsed === 'object' && parsed !== null) {
+        body.formula = parsed.formula ?? formulationInput;
+        body.domain = parsed.domain;
+        body.materials = parsed.materials;
+        body.percentages = parsed.percentages;
+      }
+    } catch (_) { body.formula = formulationInput; }
+    labApi.analysis.formulationIntelligence(projectId, body).then(d => setFormulationResult(d)).catch(err => setFormulationResult({ status: 'Risk', issues: [{ message: err.response?.data?.error || err.message }] }));
+  };
+  const runSimilarExperiments = () => {
+    setSimilarResult(null);
+    labApi.analysis.similarExperiments(projectId, similarExperimentId.trim()).then(d => setSimilarResult(d)).catch(err => setSimilarResult({ error: err.response?.data?.error || err.message }));
+  };
+
+  const sections = [
+    { id: 'insights', label: t.labInsights },
+    { id: 'contradictions', label: t.labContradictions },
+    { id: 'failure-patterns', label: t.labFailurePatterns },
+    { id: 'snapshot', label: t.labResearchSnapshot },
+    { id: 'formula-validate', label: t.labFormulaValidator },
+    { id: 'formulation-intelligence', label: t.labFormulationIntelligence },
+    { id: 'similar-experiments', label: t.labSimilarExperiments },
+    { id: 'relations', label: t.labRelations },
+    { id: 'guard', label: t.labResearchGuard },
+    { id: 'experiments', label: t.labExperimentsList }
+  ];
+
+  if (loading && experiments.length === 0) return <div className="card tab-card"><p className="loading">{t.loading}</p></div>;
+  if (error) return <div className="card tab-card"><p className="error">{error}</p><button type="button" className="secondary" onClick={load}>{t.retry}</button></div>;
+
+  return (
+    <div className="card tab-card">
+      <h3 style={{ marginBottom: 16 }}>{t.labTab}</h3>
+      <div className="flex gap" style={{ flexWrap: 'wrap', marginBottom: 16 }}>
+        {sections.map(s => (
+          <button key={s.id} type="button" className={activeSection === s.id ? 'active' : 'secondary'} onClick={() => { setActiveSection(s.id); if (s.id === 'contradictions' && !contradictions) loadContradictions(); if (s.id === 'failure-patterns' && !failurePatterns) loadFailurePatterns(); if (s.id === 'snapshot' && !snapshot) loadSnapshot(); if (s.id === 'relations' && !relations) loadRelations(); if (s.id === 'insights') loadInsights(); }}>{s.label}</button>
+        ))}
+      </div>
+
+      {activeSection === 'insights' && (
+        <section className="rag-section">
+          {insights ? (
+            <div>
+              <p><strong>{t.labInsightsSummary}</strong> {insights.total_experiments} {t.labExperiments}, {insights.success_rate_pct}% {t.labSuccessRate}, {insights.failure_count} {t.labFailures}.</p>
+              {insights.by_domain?.length > 0 && <div style={{ marginTop: 12 }}><label>{t.labByDomain}</label><ul style={{ margin: 0, paddingRight: 20 }}>{insights.by_domain.slice(0, 10).map((d, i) => <li key={i}>{d.domain}: {d.total} ({d.success_rate}% success)</li>)}</ul></div>}
+            </div>
+          ) : <p className="muted">{t.labLoadInsights}</p>}
+          <button type="button" className="secondary" onClick={loadInsights} style={{ marginTop: 8 }}>{t.refresh}</button>
+        </section>
+      )}
+
+      {activeSection === 'contradictions' && (
+        <section className="rag-section">
+          {contradictions && <div><p>{contradictions.contradictions?.length ? t.labContradictionsFound(contradictions.contradictions.length) : t.labNoContradictions}</p>{contradictions.contradictions?.map((c, i) => <div key={i} className="card" style={{ marginTop: 8, padding: 12 }}><strong>{t.labSameFormulaDifferentOutcomes}</strong><ul style={{ margin: 0, paddingRight: 20 }}>{c.experiments?.map((e, j) => <li key={j}>{e.experiment_id}: {e.experiment_outcome}</li>)}</ul></div>)}</div>}
+          <button type="button" className="secondary" onClick={loadContradictions}>{contradictions ? t.refresh : t.load}</button>
+        </section>
+      )}
+
+      {activeSection === 'failure-patterns' && (
+        <section className="rag-section">
+          {failurePatterns && <div><p>{t.labFailureCount(failurePatterns.failure_count)}</p><p>{t.labByDomain}</p><ul style={{ margin: 0, paddingRight: 20 }}>{(failurePatterns.by_domain || []).map(([name, count], i) => <li key={i}>{name}: {count}</li>)}</ul><p style={{ marginTop: 8 }}>{t.labByMaterial}</p><ul style={{ margin: 0, paddingRight: 20 }}>{(failurePatterns.by_material || []).slice(0, 15).map(([name, count], i) => <li key={i}>{name}: {count}</li>)}</ul></div>}
+          <button type="button" className="secondary" onClick={loadFailurePatterns}>{failurePatterns ? t.refresh : t.load}</button>
+        </section>
+      )}
+
+      {activeSection === 'snapshot' && (
+        <section className="rag-section">
+          {snapshot && <div><p>{t.labSnapshotTotal(snapshot.total)}</p><p>success: {snapshot.outcomes?.success ?? 0}, failure: {snapshot.outcomes?.failure ?? 0}, partial: {snapshot.outcomes?.partial ?? 0}, production: {snapshot.outcomes?.production_formula ?? 0}</p>{(snapshot.by_domain?.length > 0) && <ul style={{ margin: 0, paddingRight: 20 }}>{snapshot.by_domain.map(([d, n], i) => <li key={i}>{d}: {n}</li>)}</ul>}</div>}
+          <button type="button" className="secondary" onClick={loadSnapshot}>{snapshot ? t.refresh : t.load}</button>
+        </section>
+      )}
+
+      {activeSection === 'formula-validate' && (
+        <section className="rag-section">
+          <label>{t.labFormulaValidator}</label>
+          <textarea className="form-control" dir="ltr" rows={3} placeholder={t.labFormulaPlaceholder} value={formulaValidateInput} onChange={e => setFormulaValidateInput(e.target.value)} />
+          <button type="button" onClick={runFormulaValidate} style={{ marginTop: 8 }}>{t.validate}</button>
+          {formulaValidateResult && <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-soft)', borderRadius: 8 }}><p>{formulaValidateResult.valid !== false ? t.labFormulaValid : t.labFormulaInvalid}</p>{(formulaValidateResult.warnings || []).length > 0 && <ul style={{ paddingRight: 20 }}>{formulaValidateResult.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>}{(formulaValidateResult.errors || []).length > 0 && <ul style={{ paddingRight: 20 }}>{formulaValidateResult.errors.map((e, i) => <li key={i}>{e}</li>)}</ul>}{(formulaValidateResult.similar_experiments || []).length > 0 && <p>{t.labSimilarExperiments}: {formulaValidateResult.similar_experiments.length}</p>}</div>}
+        </section>
+      )}
+
+      {activeSection === 'formulation-intelligence' && (
+        <section className="rag-section">
+          <label>{t.labFormulationIntelligence}</label>
+          <p className="muted" style={{ marginBottom: 8 }}>{t.labFormulationIntelligenceHint}</p>
+          <textarea className="form-control" dir="ltr" rows={4} placeholder={t.labFormulationPlaceholder} value={formulationInput} onChange={e => setFormulationInput(e.target.value)} />
+          <button type="button" onClick={runFormulationIntelligence} style={{ marginTop: 8 }}>{t.check}</button>
+          {formulationResult && <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-soft)', borderRadius: 8 }}><p><strong>{t.labStatus}:</strong> <span style={{ color: formulationResult.status === 'OK' ? 'green' : formulationResult.status === 'Warning' ? 'orange' : 'red' }}>{formulationResult.status}</span></p>{(formulationResult.issues || []).length > 0 && <ul style={{ paddingRight: 20 }}>{formulationResult.issues.map((issue, i) => <li key={i}>{issue.message || issue}</li>)}</ul>}</div>}
+        </section>
+      )}
+
+      {activeSection === 'similar-experiments' && (
+        <section className="rag-section">
+          <label>{t.labSimilarExperimentsTitle}</label>
+          <p className="muted" style={{ marginBottom: 8 }}>{t.labSimilarExperimentsHint}</p>
+          <input type="text" className="form-control" dir="ltr" placeholder={t.labExperimentIdPlaceholder} value={similarExperimentId} onChange={e => setSimilarExperimentId(e.target.value)} style={{ maxWidth: 320, marginBottom: 8 }} />
+          <button type="button" onClick={runSimilarExperiments} disabled={!similarExperimentId.trim()} style={{ marginTop: 0 }}>{t.load}</button>
+          {similarResult && (similarResult.error ? <p className="error" style={{ marginTop: 12 }}>{similarResult.error}</p> : <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-soft)', borderRadius: 8 }}><p>{t.labSimilarTo(similarResult.source_experiment_id)}</p><ul style={{ margin: 0, paddingRight: 20 }}>{(similarResult.similar || []).map((s, i) => <li key={i}>{s.experiment_id} — {s.experiment_outcome} (score: {s.similarity_score})</li>)}</ul>{(similarResult.similar || []).length === 0 && <p className="muted">{t.labNoSimilarFound}</p>}</div>)}
+        </section>
+      )}
+
+      {activeSection === 'relations' && (
+        <section className="rag-section">
+          {relations && <div><p>{t.labRelationsSummary(relations.experiments_count, relations.material_library_count)}</p><p className="muted">{t.labRelationsList}</p><ul style={{ margin: 0, paddingRight: 20 }}>{(relations.relations || []).slice(0, 30).map((r, i) => <li key={i}>{r.type}: {r.experiment_id} {r.formula != null ? `— ${String(r.formula).slice(0, 40)}` : ''} {r.material != null ? `— ${r.material}` : ''}</li>)}</ul></div>}
+          <button type="button" className="secondary" onClick={loadRelations}>{relations ? t.refresh : t.load}</button>
+        </section>
+      )}
+
+      {activeSection === 'guard' && (
+        <section className="rag-section">
+          <label>{t.labResearchGuard}</label>
+          <textarea className="form-control" dir="ltr" rows={2} placeholder={t.labGuardPlaceholder} value={guardInput} onChange={e => setGuardInput(e.target.value)} />
+          <button type="button" onClick={runGuard} style={{ marginTop: 8 }}>{t.check}</button>
+          {guardResult && <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-soft)', borderRadius: 8 }}><p>{guardResult.allowed !== false ? t.labGuardAllowed : t.labGuardBlocked}</p>{(guardResult.warnings || []).length > 0 && <ul style={{ paddingRight: 20 }}>{guardResult.warnings.map((w, i) => <li key={i}>{w.message || w}</li>)}</ul>}</div>}
+        </section>
+      )}
+
+      {activeSection === 'experiments' && (
+        <section className="rag-section">
+          <p>{t.labExperimentsCount(experiments.length)}</p>
+          <p className="muted">{t.labSessionsCount(sessions.length)} {t.labMaterialsCount(materials.length)}</p>
+          <button type="button" className="secondary" onClick={load} style={{ marginBottom: 8 }}>{t.refresh}</button>
+          <ul style={{ margin: 0, paddingRight: 20, maxHeight: 300, overflow: 'auto' }}>{experiments.slice(0, 50).map(e => <li key={e.id}>{e.experiment_id} — {e.technology_domain} — {e.experiment_outcome} {e.formula ? `(${String(e.formula).slice(0, 30)}…)` : ''}</li>)}</ul>
+          {experiments.length > 50 && <p className="muted">{t.labShowingFirst(50)}</p>}
+        </section>
+      )}
+    </div>
+  );
+}
+
 function RagTab({ projectId }) {
   const [query, setQuery] = React.useState('');
   const [result, setResult] = React.useState(null);
@@ -695,8 +883,9 @@ function RagTab({ projectId }) {
   const [addingFromBucket, setAddingFromBucket] = React.useState(null);
   const [showSharepointUploadModal, setShowSharepointUploadModal] = React.useState(false);
   const [sharepointUploadFiles, setSharepointUploadFiles] = React.useState([]);
-  const [sharepointUploadFolderName, setSharepointUploadFolderName] = React.useState('');
   const [sharepointUploading, setSharepointUploading] = React.useState(false);
+  const [sharepointUploadFolderName, setSharepointUploadFolderName] = React.useState('');
+  const sharepointFolderInputRef = React.useRef(null);
 
   const loadFiles = () => projectFilesApi.list(projectId).then(d => { setProjectFiles(d.files || []); setFilesLoading(false); });
 
@@ -706,6 +895,53 @@ function RagTab({ projectId }) {
   React.useEffect(() => {
     if (projectId) loadFiles();
   }, [projectId]);
+  React.useEffect(() => {
+    const el = sharepointFolderInputRef.current;
+    if (el) {
+      el.setAttribute('webkitdirectory', '');
+      el.setAttribute('directory', '');
+    }
+  }, [showSharepointUploadModal]);
+
+  async function readDroppedFolder(entry, basePath = '') {
+    const out = [];
+    if (entry.isFile) {
+      const file = await new Promise((res, rej) => entry.file(res, rej));
+      const relPath = basePath ? `${basePath}/${file.name}` : file.name;
+      out.push(new File([file], relPath, { type: file.type }));
+      return out;
+    }
+    if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const entries = await new Promise((res, rej) => reader.readEntries(res, rej));
+      const name = entry.name || 'folder';
+      const dirPath = basePath ? `${basePath}/${name}` : name;
+      for (const e of entries) {
+        out.push(...(await readDroppedFolder(e, dirPath)));
+      }
+    }
+    return out;
+  }
+  function handleSharepointDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const items = e.dataTransfer?.items;
+    if (!items?.length) return;
+    const promises = [];
+    for (let i = 0; i < items.length; i++) {
+      const entry = items[i].webkitGetAsEntry?.();
+      if (entry) promises.push(readDroppedFolder(entry));
+    }
+    Promise.all(promises).then(arrays => {
+      const flat = arrays.flat();
+      if (flat.length) setSharepointUploadFiles(flat);
+    }).catch(() => {});
+  }
+  function handleSharepointDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+  }
 
   const onFileChange = async (e) => {
     const fileList = e.target.files;
@@ -733,7 +969,37 @@ function RagTab({ projectId }) {
     projectFilesApi.delete(projectId, fileId).then(loadFiles).catch(err => setError(err.message)).finally(() => setRemovingFileId(null));
   };
 
-  function buildBucketTree(files) {
+  /** True only when the string looks like a storage placeholder (bucket id or file_1-style), not a real filename. */
+  function looksLikeStoragePlaceholder(str) {
+    if (!str || typeof str !== 'string') return true;
+    const s = str.trim();
+    if (s.length === 0 || s === '_' || s === 'file') return true;
+    if (/[\u0590-\u05FF\uFB1D-\uFB4F]/.test(s)) return false;
+    const segment = s.split('/').pop() || s;
+    if (/^[a-fA-F0-9]{8}(\.[a-zA-Z0-9]+)?$/.test(segment)) return true;
+    if (/^file_\d+(\.[a-zA-Z0-9]+)?$/.test(segment) || /^folder_\d+$/.test(segment)) return true;
+    return false;
+  }
+  function friendlyHebrewLabel(path, fallbackName) {
+    const segment = (path || '').split('/').filter(Boolean).pop() || fallbackName || '';
+    const extMatch = segment && segment.includes('.') ? segment.match(/\.([^.]+)$/) : null;
+    const ext = extMatch ? extMatch[1] : null;
+    if (ext) return `קובץ.${ext}`;
+    return segment && segment.includes('.') ? 'קובץ' : 'תיקייה';
+  }
+  function looksMojibake(str) {
+    if (!str || typeof str !== 'string') return false;
+    return /[\uFFFD\u00A4¢]/.test(str);
+  }
+  function safeDisplayName(displayName, path, fallbackName) {
+    const d = displayName ?? fallbackName ?? path ?? '';
+    if (d === '' || d === '_') return friendlyHebrewLabel(path, fallbackName) || path || '';
+    if (/[\uFFFD\u00A4]/.test(String(d))) return friendlyHebrewLabel(path, fallbackName) || path || '';
+    if (looksMojibake(d)) return friendlyHebrewLabel(path, fallbackName) || path || '';
+    if (looksLikeStoragePlaceholder(d)) return friendlyHebrewLabel(path, fallbackName) || d;
+    return d;
+  }
+  function buildBucketTree(files, displayNamesMap = {}, currentProjectId = '') {
     const root = { type: 'folder', pathPrefix: '', children: [] };
     const pathToFolder = new Map();
     pathToFolder.set('', root);
@@ -746,14 +1012,17 @@ function RagTab({ projectId }) {
         const segment = parts[i];
         const nextPrefix = prefix ? `${prefix}/${segment}` : segment;
         if (!pathToFolder.has(nextPrefix)) {
-          const folder = { type: 'folder', name: segment, pathPrefix: nextPrefix, children: [] };
+          const displayPath = displayNamesMap[nextPrefix];
+          const rawFolderDisplay = displayPath ? displayPath.split('/').pop() : segment;
+          const folder = { type: 'folder', name: segment, pathPrefix: nextPrefix, displayName: safeDisplayName(rawFolderDisplay, nextPrefix, segment), children: [] };
           pathToFolder.set(nextPrefix, folder);
           const parent = pathToFolder.get(prefix);
           if (parent && parent.children) parent.children.push(folder);
         }
         prefix = prefix ? `${prefix}/${segment}` : segment;
       }
-      const fileNode = { type: 'file', path: f.path, name: parts[parts.length - 1], displayName: f.displayName || f.name };
+      const fileDisplayFromMap = displayNamesMap[f.path];
+      const fileNode = { type: 'file', path: f.path, name: parts[parts.length - 1], displayName: safeDisplayName(fileDisplayFromMap ?? f.displayName, f.path, f.name) };
       const parent = pathToFolder.get(prefix);
       if (parent && parent.children) parent.children.push(fileNode);
     }
@@ -767,7 +1036,25 @@ function RagTab({ projectId }) {
       nodes.forEach(n => { if (n.children) sortNodes(n.children); });
     };
     sortNodes(root.children);
-    return root.children;
+    let topLevel = root.children;
+    if (currentProjectId) {
+      const projectPrefix = 'project_' + currentProjectId;
+      const idx = topLevel.findIndex(n => n.type === 'folder' && n.pathPrefix === projectPrefix);
+      if (idx !== -1) {
+        const projectNode = topLevel[idx];
+        const rest = topLevel.filter((_, i) => i !== idx);
+        topLevel = [...(projectNode.children || []), ...rest];
+        sortNodes(topLevel);
+      }
+    }
+    const manualIdx = topLevel.findIndex(n => n.type === 'folder' && n.pathPrefix === 'manual');
+    if (manualIdx !== -1) {
+      const manualNode = topLevel[manualIdx];
+      const rest = topLevel.filter((_, i) => i !== manualIdx);
+      topLevel = [...(manualNode.children || []), ...rest];
+      sortNodes(topLevel);
+    }
+    return topLevel;
   }
 
   const toggleBucketFolder = (pathPrefix) => {
@@ -841,7 +1128,16 @@ function RagTab({ projectId }) {
               setSharepointSearchQuery('');
               setShowSharepointPicker(true);
               setSharepointBucketLoading(true);
-              projectFilesApi.listSharepointBucket(projectId).then(d => { setSharepointBucketFiles(d.files || []); setSharepointDisplayNamesMap(d.displayNamesMap || {}); setSharepointBucketLoading(false); }).catch(() => { setSharepointBucketLoading(false); setSharepointBucketFiles([]); setSharepointDisplayNamesMap({}); });
+              projectFilesApi.listSharepointBucket(projectId).then(d => {
+                const files = d.files || [];
+                const displayNamesMap = d.displayNamesMap || {};
+                setSharepointBucketFiles(files);
+                setSharepointDisplayNamesMap(displayNamesMap);
+                setSharepointBucketLoading(false);
+                // Auto-expand "manual" so uploaded files (with Hebrew/English display names) are visible
+                const hasManual = files.some(f => (f.path || '').startsWith('manual/'));
+                if (hasManual) setSharepointExpandedFolders(prev => new Set(prev).add('manual'));
+              }).catch(() => { setSharepointBucketLoading(false); setSharepointBucketFiles([]); setSharepointDisplayNamesMap({}); });
             }}
           >
             {t.chooseFromSharepoint}
@@ -867,7 +1163,7 @@ function RagTab({ projectId }) {
               <div className="flex gap" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h4 style={{ margin: 0 }}>{t.sharepointBucketList}</h4>
                 <div className="flex gap" style={{ alignItems: 'center' }}>
-                  <button type="button" className="rag-file-button" onClick={() => { setSharepointUploadFiles([]); setSharepointUploadFolderName(''); setShowSharepointUploadModal(true); }}>{t.uploadToSharepointManual}</button>
+                  <button type="button" className="rag-file-button" onClick={() => { setSharepointUploadFiles([]); setShowSharepointUploadModal(true); }}>{t.uploadToSharepointManual}</button>
                   <button type="button" className="secondary" onClick={() => setShowSharepointPicker(false)}>×</button>
                 </div>
               </div>
@@ -894,8 +1190,8 @@ function RagTab({ projectId }) {
                     if (node.type === 'file') {
                       return (
                         <li key={node.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)', paddingRight: depth * 16 }}>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }} title={node.path}>{node.displayName || node.name}</span>
-                          <button type="button" className="secondary" disabled={addingFromBucket === node.path} onClick={() => { setAddingFromBucket(node.path); projectFilesApi.addFromBucket(projectId, node.path, node.displayName || node.name).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }} title={node.path}>{safeDisplayName(node.displayName, node.path, node.name)}</span>
+                          <button type="button" className="secondary" disabled={addingFromBucket === node.path} onClick={() => { setAddingFromBucket(node.path); projectFilesApi.addFromBucket(projectId, node.path, safeDisplayName(node.displayName, node.path, node.name)).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
                         </li>
                       );
                     }
@@ -904,7 +1200,7 @@ function RagTab({ projectId }) {
                       <li key={node.pathPrefix || node.name} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                         <button type="button" className="secondary" style={{ width: '100%', justifyContent: 'flex-start', textAlign: 'right', marginBottom: 4, padding: '6px 8px', background: 'var(--bg)' }} onClick={() => toggleBucketFolder(node.pathPrefix)} aria-expanded={expanded}>
                           <span style={{ marginLeft: 8 }}>{expanded ? '▼' : '▶'}</span>
-                          <span style={{ marginRight: 6 }}>{sharepointDisplayNamesMap[node.pathPrefix] || node.name}</span>
+                          <span style={{ marginRight: 6 }}>{safeDisplayName(node.displayName, node.path, node.name)}</span>
                         </button>
                         {expanded && node.children && node.children.length > 0 && (
                           <ul style={{ listStyle: 'none', padding: 0, margin: 0, borderRight: '1px solid var(--border)', marginRight: 8 }}>
@@ -917,16 +1213,19 @@ function RagTab({ projectId }) {
                   if (isSearch) {
                     return (
                       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                        {filtered.map(f => (
-                          <li key={f.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.path}>{f.displayName || f.name}</span>
-                            <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); projectFilesApi.addFromBucket(projectId, f.path, f.displayName || f.name).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
-                          </li>
-                        ))}
+                        {filtered.map(f => {
+                          const fileDisplay = sharepointDisplayNamesMap[f.path] ?? f.displayName;
+                          return (
+                            <li key={f.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.path}>{safeDisplayName(fileDisplay, f.path, f.name)}</span>
+                              <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); projectFilesApi.addFromBucket(projectId, f.path, safeDisplayName(fileDisplay, f.path, f.name)).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
+                            </li>
+                          );
+                        })}
                       </ul>
                     );
                   }
-                  const tree = buildBucketTree(filtered);
+                  const tree = buildBucketTree(filtered, sharepointDisplayNamesMap, projectId);
                   return (
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                       {tree.map(node => renderBucketNode(node))}
@@ -951,8 +1250,25 @@ function RagTab({ projectId }) {
                 className="rag-file-input-hidden"
                 onChange={e => { const list = e.target.files; setSharepointUploadFiles(list ? Array.from(list) : []); e.target.value = ''; }}
               />
+              <input
+                ref={sharepointFolderInputRef}
+                type="file"
+                multiple
+                id="sharepoint-upload-folder"
+                className="rag-file-input-hidden"
+                onChange={e => { const list = e.target.files; setSharepointUploadFiles(list ? Array.from(list) : []); e.target.value = ''; }}
+              />
+              <div
+                onDrop={handleSharepointDrop}
+                onDragOver={handleSharepointDragOver}
+                style={{ border: '2px dashed var(--border)', borderRadius: 8, padding: 24, marginBottom: 12, textAlign: 'center', color: 'var(--muted)', fontSize: '0.9rem' }}
+              >
+                גרור תיקייה לכאן או בחר קבצים/תיקייה
+              </div>
               <div className="flex gap" style={{ marginBottom: 12 }}>
+                {/* Files upload to bucket with ASCII paths; Hebrew names are stored as display names and shown in the UI (Supabase bucket does not support Hebrew in paths). */}
                 <label htmlFor="sharepoint-upload-files" className="rag-file-button" style={{ display: 'inline-block' }}>בחר קבצים</label>
+                <button type="button" className="rag-file-button" onClick={() => sharepointFolderInputRef.current?.click()}>בחר תיקייה</button>
               </div>
               {sharepointUploadFiles.length > 0 && (
                 <>
@@ -977,9 +1293,16 @@ function RagTab({ projectId }) {
                 <button type="button" disabled={sharepointUploadFiles.length === 0 || sharepointUploading} onClick={() => {
                   setSharepointUploading(true);
                   setError(null);
-                  const folderPath = sharepointUploadFiles.length > 1 ? (sharepointUploadFolderName.trim() || 'upload') : '';
-                  projectFilesApi.uploadToSharepointBucket(projectId, sharepointUploadFiles, folderPath)
+                  const folderPath = sharepointUploadFolderName.trim() || (sharepointUploadFiles.length > 1 ? 'upload' : '');
+                  projectFilesApi.uploadToSharepointBucketDirect(projectId, sharepointUploadFiles, folderPath)
                     .then(res => {
+                      if (res.uploaded_paths?.length > 0 && folderPath) {
+                        const firstPath = res.uploaded_paths[0].path || '';
+                        const bucketFolderPath = firstPath.includes('/') ? firstPath.slice(0, firstPath.lastIndexOf('/')) : firstPath;
+                        console.log('[SharePoint upload] Folder in bucket:', res.bucket || 'sharepoint-files', '| Path:', bucketFolderPath, '| Display name:', folderPath);
+                        if (res.supabase_project) console.log('[SharePoint upload] Open Supabase dashboard → project', res.supabase_project, '→ Storage → bucket', (res.bucket || 'sharepoint-files'));
+                      }
+                      if (res.errors?.length) console.warn('[SharePoint upload] Errors:', res.errors);
                       setActionMessage(res.failed > 0 ? t.sharepointUploadSomeFailed : t.sharepointUploadSuccess);
                       setTimeout(() => setActionMessage(null), 3000);
                       setShowSharepointUploadModal(false);
@@ -987,7 +1310,13 @@ function RagTab({ projectId }) {
                       setSharepointUploadFolderName('');
                       if (showSharepointPicker) {
                         setSharepointBucketLoading(true);
-                        projectFilesApi.listSharepointBucket(projectId).then(d => { setSharepointBucketFiles(d.files || []); setSharepointDisplayNamesMap(d.displayNamesMap || {}); setSharepointBucketLoading(false); }).catch(() => setSharepointBucketLoading(false));
+                        projectFilesApi.listSharepointBucket(projectId).then(d => {
+                          const files = d.files || [];
+                          setSharepointBucketFiles(files);
+                          setSharepointDisplayNamesMap(d.displayNamesMap || {});
+                          setSharepointBucketLoading(false);
+                          setSharepointExpandedFolders(prev => new Set(prev).add('manual'));
+                        }).catch(() => setSharepointBucketLoading(false));
                       }
                     })
                     .catch(err => setError(err.response?.data?.error || err.message))

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { createClient } from '@supabase/supabase-js';
 
 // Backend URL from .env (VITE_MANEGER_API_URL) – used for all API and file uploads
 const API_BASE = (import.meta.env.VITE_MANEGER_API_URL || 'http://localhost:8001').replace(/\/$/, '');
@@ -37,6 +38,7 @@ export function clearAuth() {
 api.interceptors.request.use(config => {
   const token = getStoredToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (config.data instanceof FormData) delete config.headers['Content-Type'];
   return config;
 });
 
@@ -148,13 +150,93 @@ export const projectFiles = {
   },
   listSharepointBucket: (projectId) => api.get(`/api/projects/${projectId}/files/sharepoint-bucket`).then(r => r.data),
   addFromBucket: (projectId, path, displayName) => api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName }).then(r => r.data),
+  /** Upload via backend. Sends fileNames as JSON + base64 so Hebrew/Unicode names are preserved (multipart can corrupt them). Uses api so auth token is always attached. */
   uploadToSharepointBucket: (projectId, files, folderPath = '') => {
     const form = new FormData();
     if (folderPath) form.append('folderPath', folderPath);
-    for (let i = 0; i < files.length; i++) form.append('files', files[i], files[i].name || files[i].webkitRelativePath || `file-${i}`);
+    const names = files.map(f => f.name || f.webkitRelativePath || 'file');
+    form.append('fileNames', JSON.stringify(names));
+    try {
+      form.append('fileNamesB64', btoa(unescape(encodeURIComponent(JSON.stringify(names)))));
+    } catch (_) {}
+    for (let i = 0; i < files.length; i++) form.append('files', files[i], `file-${i}`);
+    return api.post(`/api/projects/${projectId}/files/upload-to-sharepoint-bucket`, form, { timeout: 120000 }).then(r => r.data);
+  },
+  /** Direct-to-bucket upload using signed URLs (faster). Supabase bucket does not support Hebrew in paths; backend returns ASCII-only storage paths. We send path → original (Hebrew) name to update-display-names so the UI shows Hebrew. When folder name is set or single file, we use backend multipart so fileNames (UTF-8) are preserved the same way. */
+  async uploadToSharepointBucketDirect(projectId, files, folderPath = '') {
+    const hasFolderName = (folderPath && String(folderPath).trim()) !== '';
+    const singleFile = Array.isArray(files) && files.length === 1;
+    if (hasFolderName || singleFile) {
+      return this.uploadToSharepointBucket(projectId, files, folderPath);
+    }
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnon) {
+      return this.uploadToSharepointBucket(projectId, files, folderPath);
+    }
     const token = getStoredToken();
-    return axios.post(`${API_BASE}/api/projects/${projectId}/files/upload-to-sharepoint-bucket`, form, { timeout: 120000, headers: token ? { Authorization: `Bearer ${token}` } : {} }).then(r => r.data);
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const fileDescriptors = files.map(f => ({
+      relativeName: f.name || f.webkitRelativePath || 'file',
+      contentType: f.type || undefined
+    }));
+    const { data } = await axios.post(
+      `${API_BASE}/api/projects/${projectId}/files/upload-to-sharepoint-bucket/signed-urls`,
+      { folderPath, files: fileDescriptors },
+      { headers, timeout: 30000 }
+    );
+    const { bucket, urls } = data;
+    if (!bucket || !Array.isArray(urls) || urls.length !== files.length) {
+      throw new Error('Invalid signed URLs response');
+    }
+    const supabase = createClient(supabaseUrl, supabaseAnon);
+    const uploaded = [];
+    const failed = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const relativeName = fileDescriptors[i].relativeName;
+      const { path, token: uploadToken } = urls[i];
+      const { error } = await supabase.storage.from(bucket).uploadToSignedUrl(path, uploadToken, file, { contentType: file.type || 'application/octet-stream' });
+      if (error) failed.push({ name: relativeName, error: error.message });
+      else uploaded.push({ path, name: relativeName });
+    }
+    if (uploaded.length > 0) {
+      const mappings = {};
+      const folderPathNorm = (folderPath && String(folderPath).trim()) ? String(folderPath).trim().replace(/\/+/g, '/') : '';
+      uploaded.forEach(u => {
+        const displayName = folderPathNorm ? `${folderPathNorm}/${u.name}`.replace(/\/+/g, '/') : u.name;
+        mappings[u.path] = displayName;
+      });
+      await axios.post(
+        `${API_BASE}/api/projects/${projectId}/files/upload-to-sharepoint-bucket/update-display-names`,
+        { mappings },
+        { headers: { ...headers, 'Content-Type': 'application/json; charset=utf-8' }, timeout: 15000 }
+      ).catch(err => { console.warn('SharePoint display names update failed:', err.response?.data?.error || err.message); });
+    }
+    await axios.post(`${API_BASE}/api/projects/${projectId}/files/upload-to-sharepoint-bucket/invalidate-cache`, {}, { headers }).catch(() => {});
+    return { uploaded: uploaded.length, failed: failed.length, uploaded_paths: uploaded, errors: failed.length ? failed : undefined };
   }
+};
+
+export const lab = {
+  experiments: (projectId, params) => api.get(`/api/projects/${projectId}/experiments`, { params }).then(r => r.data),
+  researchSessions: (projectId) => api.get(`/api/projects/${projectId}/research-sessions`).then(r => r.data),
+  createResearchSession: (projectId, body) => api.post(`/api/projects/${projectId}/research-sessions`, body).then(r => r.data),
+  materialLibrary: (projectId) => api.get(`/api/projects/${projectId}/material-library`).then(r => r.data),
+  addMaterial: (projectId, body) => api.post(`/api/projects/${projectId}/material-library`, body).then(r => r.data),
+  importLog: (projectId, params) => api.get(`/api/projects/${projectId}/import/log`, { params }).then(r => r.data),
+  syncToMatriya: (projectId) => api.post(`/api/projects/${projectId}/experiments/sync-to-matriya`).then(r => r.data),
+  analysis: {
+    contradictions: (projectId) => api.get(`/api/projects/${projectId}/analysis/contradictions`).then(r => r.data),
+    failurePatterns: (projectId) => api.get(`/api/projects/${projectId}/analysis/failure-patterns`).then(r => r.data),
+    researchSnapshot: (projectId, params) => api.get(`/api/projects/${projectId}/analysis/research-snapshot`, { params }).then(r => r.data),
+    formulaValidate: (projectId, body) => api.post(`/api/projects/${projectId}/analysis/formula-validate`, body).then(r => r.data),
+    relations: (projectId) => api.get(`/api/projects/${projectId}/analysis/relations`).then(r => r.data),
+    insights: (projectId) => api.get(`/api/projects/${projectId}/analysis/insights`).then(r => r.data),
+    formulationIntelligence: (projectId, body) => api.post(`/api/projects/${projectId}/analysis/formulation-intelligence`, body).then(r => r.data),
+    similarExperiments: (projectId, experimentId) => api.get(`/api/projects/${projectId}/analysis/similar-experiments`, { params: { experiment_id: experimentId } }).then(r => r.data)
+  },
+  guard: (projectId, body) => api.post(`/api/projects/${projectId}/guard/check`, body).then(r => r.data)
 };
 
 export const runs = {
