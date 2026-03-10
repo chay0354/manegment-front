@@ -1187,11 +1187,14 @@ function RagTab({ projectId }) {
                   if (filtered.length === 0) return <p className="muted">{t.noSharepointFiles}</p>;
                   const isSearch = !!q;
                   function renderBucketNode(node, depth = 0) {
+                    const pathKey = node.path || node.pathPrefix || '';
+                    const displayFromMap = sharepointDisplayNamesMap[pathKey];
+                    const display = displayFromMap ?? node.displayName;
                     if (node.type === 'file') {
                       return (
                         <li key={node.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)', paddingRight: depth * 16 }}>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }} title={node.path}>{safeDisplayName(node.displayName, node.path, node.name)}</span>
-                          <button type="button" className="secondary" disabled={addingFromBucket === node.path} onClick={() => { setAddingFromBucket(node.path); projectFilesApi.addFromBucket(projectId, node.path, safeDisplayName(node.displayName, node.path, node.name)).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }} title={node.path}>{safeDisplayName(display, node.path, node.name)}</span>
+                          <button type="button" className="secondary" disabled={addingFromBucket === node.path} onClick={() => { setAddingFromBucket(node.path); projectFilesApi.addFromBucket(projectId, node.path, safeDisplayName(display, node.path, node.name)).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
                         </li>
                       );
                     }
@@ -1200,7 +1203,7 @@ function RagTab({ projectId }) {
                       <li key={node.pathPrefix || node.name} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                         <button type="button" className="secondary" style={{ width: '100%', justifyContent: 'flex-start', textAlign: 'right', marginBottom: 4, padding: '6px 8px', background: 'var(--bg)' }} onClick={() => toggleBucketFolder(node.pathPrefix)} aria-expanded={expanded}>
                           <span style={{ marginLeft: 8 }}>{expanded ? '▼' : '▶'}</span>
-                          <span style={{ marginRight: 6 }}>{safeDisplayName(node.displayName, node.path, node.name)}</span>
+                          <span style={{ marginRight: 6 }}>{safeDisplayName(display, node.path || node.pathPrefix, node.name)}</span>
                         </button>
                         {expanded && node.children && node.children.length > 0 && (
                           <ul style={{ listStyle: 'none', padding: 0, margin: 0, borderRight: '1px solid var(--border)', marginRight: 8 }}>
