@@ -938,7 +938,13 @@ function RagTab({ projectId }) {
     }
     Promise.all(promises).then(arrays => {
       const flat = arrays.flat();
-      if (flat.length) setSharepointUploadFiles(flat);
+      if (flat.length) {
+        setSharepointUploadFiles(flat);
+        // Default folder name from dropped folder (first file's path is "FolderName/..." from readDroppedFolder)
+        const firstPath = flat[0].name;
+        const folderName = firstPath && firstPath.includes('/') ? firstPath.split('/')[0] : '';
+        if (folderName) setSharepointUploadFolderName(folderName);
+      }
     }).catch(() => {});
   }
   function handleSharepointDragOver(e) {
@@ -1284,7 +1290,13 @@ function RagTab({ projectId }) {
                 multiple
                 id="sharepoint-upload-files"
                 className="rag-file-input-hidden"
-                onChange={e => { const list = e.target.files; setSharepointUploadFiles(list ? Array.from(list) : []); e.target.value = ''; }}
+                onChange={e => {
+                  const list = e.target.files;
+                  const files = list ? Array.from(list) : [];
+                  setSharepointUploadFiles(files);
+                  setSharepointUploadFolderName(''); // no folder context when picking individual files
+                  e.target.value = '';
+                }}
               />
               <input
                 ref={sharepointFolderInputRef}
@@ -1292,7 +1304,17 @@ function RagTab({ projectId }) {
                 multiple
                 id="sharepoint-upload-folder"
                 className="rag-file-input-hidden"
-                onChange={e => { const list = e.target.files; const files = list ? Array.from(list) : []; setSharepointUploadFiles(files); e.target.value = ''; }}
+                onChange={e => {
+                  const list = e.target.files;
+                  const files = list ? Array.from(list) : [];
+                  setSharepointUploadFiles(files);
+                  if (files.length > 0) {
+                    const path = files[0].webkitRelativePath;
+                    const folderName = path ? path.split('/')[0] : '';
+                    if (folderName) setSharepointUploadFolderName(folderName);
+                  }
+                  e.target.value = '';
+                }}
               />
               <div
                 onDrop={handleSharepointDrop}
