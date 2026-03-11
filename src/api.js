@@ -39,10 +39,14 @@ export function clearAuth() {
 export function getNetworkErrorMessage(err) {
   if (!err) return 'שגיאה לא ידועה';
   const serverMsg = err.response?.data?.error;
-  if (serverMsg) return serverMsg;
+  if (serverMsg && typeof serverMsg === 'string') return serverMsg;
+  const status = err.response?.status;
   const msg = err.message || '';
   const code = err.code || '';
   if (code === 'ECONNABORTED' || msg.includes('timeout')) return 'הבקשה ארכה יותר מדי (timeout). נסה שוב או להעלות פחות קבצים.';
+  if (status === 404) return 'השרת החזיר 404 – ייתכן שהנתיב לא קיים. בדוק שהשרת מעודכן (Vercel).';
+  if (status === 413) return 'הקבצים גדולים מדי. נסה להעלות פחות קבצים או קבצים קטנים יותר.';
+  if (status >= 500) return `שגיאת שרת (${status}). נסה שוב מאוחר יותר.`;
   if (code === 'ERR_NETWORK' || msg === 'Network Error') return 'שגיאת רשת: לא ניתן להתחבר לשרת. בדוק ש־השרת רץ ו־VITE_MANEGER_API_URL נכון.';
   if (code === 'ERR_CONNECTION_REFUSED' || msg.includes('refused')) return 'החיבור נדחה. וודא שהשרת רץ (npm run dev).';
   return msg || String(err);
