@@ -183,13 +183,8 @@ export const projectFiles = {
     return api.post(`/api/projects/${projectId}/files/upload-to-sharepoint-bucket`, form, { timeout: 900000, onUploadProgress: options.onUploadProgress, headers }).then(r => r.data);
   },
   getSharepointUploadProgress: (projectId, uploadId) => api.get(`/api/projects/${projectId}/files/upload-to-sharepoint-bucket/progress`, { params: { uploadId } }).then(r => r.data),
-  /** Direct-to-bucket upload using signed URLs (faster). Supabase bucket does not support Hebrew in paths; backend returns ASCII-only storage paths. We send path → original (Hebrew) name to update-display-names so the UI shows Hebrew. When folder name is set or single file, we use backend multipart so fileNames (UTF-8) are preserved the same way. */
+  /** Direct-to-bucket upload using signed URLs to avoid Vercel 413 (body limit) and CORS-on-error. File bytes go to Supabase, not the backend; display names are sent via update-display-names. Prefer this whenever Supabase is configured; fall back to backend multipart only when not. */
   async uploadToSharepointBucketDirect(projectId, files, folderPath = '', options = {}) {
-    const hasFolderName = (folderPath && String(folderPath).trim()) !== '';
-    const singleFile = Array.isArray(files) && files.length === 1;
-    if (hasFolderName || singleFile) {
-      return this.uploadToSharepointBucket(projectId, files, folderPath, options);
-    }
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseAnon) {
