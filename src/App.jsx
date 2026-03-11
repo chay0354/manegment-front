@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Link, useParams, useNavigate, Navigate } from 'react-router-dom';
-import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, chat as chatApi, lab as labApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth } from './api';
+import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, chat as chatApi, lab as labApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth, getNetworkErrorMessage } from './api';
 import t from './strings';
 
 function Home({ user, onLogout }) {
@@ -884,7 +884,11 @@ function RagTab({ projectId }) {
   const [showSharepointUploadModal, setShowSharepointUploadModal] = React.useState(false);
   const [sharepointUploadFiles, setSharepointUploadFiles] = React.useState([]);
   const [sharepointUploading, setSharepointUploading] = React.useState(false);
+  const [sharepointUploadLoaded, setSharepointUploadLoaded] = React.useState(0);
+  const [sharepointUploadTotal, setSharepointUploadTotal] = React.useState(0);
+  const [sharepointServerProgress, setSharepointServerProgress] = React.useState(null);
   const [sharepointUploadFolderName, setSharepointUploadFolderName] = React.useState('');
+  const sharepointProgressPollRef = React.useRef(null);
   const sharepointFolderInputRef = React.useRef(null);
 
   const loadFiles = () => projectFilesApi.list(projectId).then(d => { setProjectFiles(d.files || []); setFilesLoading(false); });
@@ -998,6 +1002,11 @@ function RagTab({ projectId }) {
     if (looksMojibake(d)) return friendlyHebrewLabel(path, fallbackName) || path || '';
     if (looksLikeStoragePlaceholder(d)) return friendlyHebrewLabel(path, fallbackName) || d;
     return d;
+  }
+  const RAG_ALLOWED_EXT = /\.(pdf|docx|doc|txt|xlsx|xls)$/i;
+  function isRagAllowedFile(pathOrName) {
+    const s = (pathOrName || '').trim();
+    return s && RAG_ALLOWED_EXT.test(s);
   }
   function buildBucketTree(files, displayNamesMap = {}, currentProjectId = '') {
     const root = { type: 'folder', pathPrefix: '', children: [] };
@@ -1205,10 +1214,15 @@ function RagTab({ projectId }) {
                       console.log('[SharePoint decode] render file:', pathKey, '| displayFromMap:', JSON.stringify(displayFromMap), '| node.displayName:', JSON.stringify(node.displayName), '| final:', JSON.stringify(finalDisplay));
                     }
                     if (node.type === 'file') {
+                      const ragAllowed = isRagAllowedFile(node.path || node.name);
                       return (
                         <li key={node.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)', paddingRight: depth * 16 }}>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }} title={node.path}>{finalDisplay}</span>
-                          <button type="button" className="secondary" disabled={addingFromBucket === node.path} onClick={() => { setAddingFromBucket(node.path); projectFilesApi.addFromBucket(projectId, node.path, safeDisplayName(display, node.path, node.name)).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
+                          {ragAllowed ? (
+                            <button type="button" className="secondary" disabled={addingFromBucket === node.path} onClick={() => { setAddingFromBucket(node.path); projectFilesApi.addFromBucket(projectId, node.path, safeDisplayName(display, node.path, node.name)).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
+                          ) : (
+                            <span className="muted" style={{ fontSize: '0.85rem' }}>קובץ בפורמט לא מתאים, לא ניתן לסרוק על ידי RAG</span>
+                          )}
                         </li>
                       );
                     }
@@ -1232,10 +1246,15 @@ function RagTab({ projectId }) {
                       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                         {filtered.map(f => {
                           const fileDisplay = sharepointDisplayNamesMap[f.path] ?? f.displayName;
+                          const ragAllowed = isRagAllowedFile(f.path || f.name);
                           return (
                             <li key={f.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.path}>{safeDisplayName(fileDisplay, f.path, f.name)}</span>
-                              <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); projectFilesApi.addFromBucket(projectId, f.path, safeDisplayName(fileDisplay, f.path, f.name)).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
+                              {ragAllowed ? (
+                                <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); projectFilesApi.addFromBucket(projectId, f.path, safeDisplayName(fileDisplay, f.path, f.name)).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
+                              ) : (
+                                <span className="muted" style={{ fontSize: '0.85rem' }}>קובץ בפורמט לא מתאים, לא ניתן לסרוק על ידי RAG</span>
+                              )}
                             </li>
                           );
                         })}
@@ -1273,7 +1292,7 @@ function RagTab({ projectId }) {
                 multiple
                 id="sharepoint-upload-folder"
                 className="rag-file-input-hidden"
-                onChange={e => { const list = e.target.files; setSharepointUploadFiles(list ? Array.from(list) : []); e.target.value = ''; }}
+                onChange={e => { const list = e.target.files; const files = list ? Array.from(list) : []; setSharepointUploadFiles(files); e.target.value = ''; }}
               />
               <div
                 onDrop={handleSharepointDrop}
@@ -1287,7 +1306,7 @@ function RagTab({ projectId }) {
                 <label htmlFor="sharepoint-upload-files" className="rag-file-button" style={{ display: 'inline-block' }}>בחר קבצים</label>
                 <button type="button" className="rag-file-button" onClick={() => sharepointFolderInputRef.current?.click()}>בחר תיקייה</button>
               </div>
-              {sharepointUploadFiles.length > 0 && (
+              {sharepointUploadFiles.length > 0 && !sharepointUploading && (
                 <>
                   <p className="muted" style={{ marginBottom: 8 }}>{sharepointUploadFiles.length} קבצים נבחרו</p>
                   {sharepointUploadFiles.length > 1 && (
@@ -1305,40 +1324,121 @@ function RagTab({ projectId }) {
                   )}
                 </>
               )}
+              {sharepointUploading && (() => {
+                const total = sharepointUploadTotal || sharepointUploadFiles.reduce((s, f) => s + (f.size || 0), 0);
+                const loaded = sharepointUploadLoaded;
+                const format = (n) => n >= 1024 * 1024 ? (n / (1024 * 1024)).toFixed(1) + ' MB' : n >= 1024 ? (n / 1024).toFixed(1) + ' KB' : n + ' B';
+                const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+                const waitingOnServer = total > 0 && loaded >= total;
+                const server = sharepointServerProgress;
+                const serverLine = server?.phase === 'displayNames'
+                  ? 'שומר שמות תצוגה...'
+                  : server?.file != null && server?.total
+                    ? `מעלה קובץ ${server.file} מתוך ${server.total}`
+                    : waitingOnServer
+                      ? 'מעבד בשרת...'
+                      : null;
+                return (
+                  <div style={{ marginBottom: 12 }} role="status" aria-live="polite">
+                    <p className="loading" style={{ marginBottom: 6 }}>
+                      {waitingOnServer ? (serverLine || 'מעבד בשרת...') : `מעלה ${sharepointUploadFiles.length} קבצים — ${format(loaded)} / ${format(total)}`}
+                    </p>
+                    <div style={{ height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${pct}%`,
+                          background: 'var(--accent)',
+                          borderRadius: 4,
+                          transition: 'width 0.2s ease'
+                        }}
+                      />
+                    </div>
+                    {waitingOnServer && serverLine && <p className="muted" style={{ marginTop: 6, fontSize: '0.85rem' }}>{serverLine}</p>}
+                  </div>
+                );
+              })()}
               <div className="flex gap">
                 <button type="button" className="secondary" onClick={() => setShowSharepointUploadModal(false)} disabled={sharepointUploading}>ביטול</button>
-                <button type="button" disabled={sharepointUploadFiles.length === 0 || sharepointUploading} onClick={() => {
-                  setSharepointUploading(true);
-                  setError(null);
-                  const folderPath = sharepointUploadFolderName.trim() || (sharepointUploadFiles.length > 1 ? 'upload' : '');
-                  projectFilesApi.uploadToSharepointBucketDirect(projectId, sharepointUploadFiles, folderPath)
-                    .then(res => {
-                      if (res.uploaded_paths?.length > 0 && folderPath) {
-                        const firstPath = res.uploaded_paths[0].path || '';
-                        const bucketFolderPath = firstPath.includes('/') ? firstPath.slice(0, firstPath.lastIndexOf('/')) : firstPath;
-                        console.log('[SharePoint upload] Folder in bucket:', res.bucket || 'sharepoint-files', '| Path:', bucketFolderPath, '| Display name:', folderPath);
-                        if (res.supabase_project) console.log('[SharePoint upload] Open Supabase dashboard → project', res.supabase_project, '→ Storage → bucket', (res.bucket || 'sharepoint-files'));
+                <button
+                  type="button"
+                  disabled={sharepointUploadFiles.length === 0 || sharepointUploading}
+                  onClick={() => {
+                    if (sharepointUploadFiles.length === 0) {
+                      setError('בחר קבצים או תיקייה להעלאה');
+                      return;
+                    }
+                    if (!projectId) {
+                      setError('פרויקט לא זמין');
+                      return;
+                    }
+                    setSharepointUploading(true);
+                    setSharepointServerProgress(null);
+                    const totalBytes = sharepointUploadFiles.reduce((s, f) => s + (f.size || 0), 0);
+                    setSharepointUploadLoaded(0);
+                    setSharepointUploadTotal(totalBytes);
+                    setError(null);
+                    const folderPath = sharepointUploadFolderName.trim() || (sharepointUploadFiles.length > 1 ? 'upload' : '');
+                    const filesToUpload = [...sharepointUploadFiles];
+                    const uploadId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `upload-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+                    const progressOpts = {
+                      uploadId,
+                      onUploadProgress: (e) => {
+                        if (e.loaded != null) setSharepointUploadLoaded(e.loaded);
+                        if (e.total != null) setSharepointUploadTotal(e.total);
+                        if (e.total && e.loaded >= e.total && !sharepointProgressPollRef.current) {
+                          sharepointProgressPollRef.current = setInterval(() => {
+                            projectFilesApi.getSharepointUploadProgress(projectId, uploadId).then(setSharepointServerProgress).catch(() => {});
+                          }, 800);
+                        }
+                      },
+                      onProgress: (loaded, total) => {
+                        setSharepointUploadLoaded(loaded);
+                        if (total != null) setSharepointUploadTotal(total);
                       }
-                      if (res.errors?.length) console.warn('[SharePoint upload] Errors:', res.errors);
-                      setActionMessage(res.failed > 0 ? t.sharepointUploadSomeFailed : t.sharepointUploadSuccess);
-                      setTimeout(() => setActionMessage(null), 3000);
-                      setShowSharepointUploadModal(false);
-                      setSharepointUploadFiles([]);
-                      setSharepointUploadFolderName('');
-                      if (showSharepointPicker) {
-                        setSharepointBucketLoading(true);
-                        projectFilesApi.listSharepointBucket(projectId).then(d => {
-                          const files = d.files || [];
-                          setSharepointBucketFiles(files);
-                          setSharepointDisplayNamesMap(d.displayNamesMap || {});
-                          setSharepointBucketLoading(false);
-                          setSharepointExpandedFolders(prev => new Set(prev).add('manual'));
-                        }).catch(() => setSharepointBucketLoading(false));
-                      }
-                    })
-                    .catch(err => setError(err.response?.data?.error || err.message))
-                    .finally(() => setSharepointUploading(false));
-                }}>{sharepointUploading ? t.uploading : 'העלה'}</button>
+                    };
+                    projectFilesApi.uploadToSharepointBucketDirect(projectId, filesToUpload, folderPath, progressOpts)
+                      .then(res => {
+                        if (res.uploaded_paths?.length > 0 && folderPath) {
+                          const firstPath = res.uploaded_paths[0].path || '';
+                          const bucketFolderPath = firstPath.includes('/') ? firstPath.slice(0, firstPath.lastIndexOf('/')) : firstPath;
+                          console.log('[SharePoint upload] Folder in bucket:', res.bucket || 'sharepoint-files', '| Path:', bucketFolderPath, '| Display name:', folderPath);
+                          if (res.supabase_project) console.log('[SharePoint upload] Open Supabase dashboard → project', res.supabase_project, '→ Storage → bucket', (res.bucket || 'sharepoint-files'));
+                        }
+                        if (res.errors?.length) console.warn('[SharePoint upload] Errors:', res.errors);
+                        setActionMessage(res.failed > 0 ? t.sharepointUploadSomeFailed : t.sharepointUploadSuccess);
+                        setTimeout(() => setActionMessage(null), 3000);
+                        setShowSharepointUploadModal(false);
+                        setSharepointUploadFiles([]);
+                        setSharepointUploadFolderName('');
+                        if (showSharepointPicker) {
+                          setSharepointBucketLoading(true);
+                          projectFilesApi.listSharepointBucket(projectId).then(d => {
+                            const files = d.files || [];
+                            setSharepointBucketFiles(files);
+                            setSharepointDisplayNamesMap(d.displayNamesMap || {});
+                            setSharepointBucketLoading(false);
+                            setSharepointExpandedFolders(prev => new Set(prev).add('manual'));
+                          }).catch(() => setSharepointBucketLoading(false));
+                        }
+                      })
+                      .catch(err => {
+                        setError(getNetworkErrorMessage(err));
+                      })
+                      .finally(() => {
+                        if (sharepointProgressPollRef.current) {
+                          clearInterval(sharepointProgressPollRef.current);
+                          sharepointProgressPollRef.current = null;
+                        }
+                        setSharepointUploading(false);
+                        setSharepointUploadLoaded(0);
+                        setSharepointUploadTotal(0);
+                        setSharepointServerProgress(null);
+                      });
+                  }}
+                >
+                  {sharepointUploading ? t.uploading : 'העלה'}
+                </button>
               </div>
             </div>
           </div>

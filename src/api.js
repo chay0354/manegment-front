@@ -35,6 +35,19 @@ export function clearAuth() {
   setAuth(null, null);
 }
 
+/** Turn axios network/request errors into a clearer message for the user. */
+export function getNetworkErrorMessage(err) {
+  if (!err) return 'שגיאה לא ידועה';
+  const serverMsg = err.response?.data?.error;
+  if (serverMsg) return serverMsg;
+  const msg = err.message || '';
+  const code = err.code || '';
+  if (code === 'ECONNABORTED' || msg.includes('timeout')) return 'הבקשה ארכה יותר מדי (timeout). נסה שוב או להעלות פחות קבצים.';
+  if (code === 'ERR_NETWORK' || msg === 'Network Error') return 'שגיאת רשת: לא ניתן להתחבר לשרת. בדוק ש־השרת רץ ו־VITE_MANEGER_API_URL נכון.';
+  if (code === 'ERR_CONNECTION_REFUSED' || msg.includes('refused')) return 'החיבור נדחה. וודא שהשרת רץ (npm run dev).';
+  return msg || String(err);
+}
+
 api.interceptors.request.use(config => {
   const token = getStoredToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -151,7 +164,7 @@ export const projectFiles = {
   listSharepointBucket: (projectId) => api.get(`/api/projects/${projectId}/files/sharepoint-bucket`, { params: { _: Date.now() } }).then(r => r.data),
   addFromBucket: (projectId, path, displayName) => api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName }).then(r => r.data),
   /** Upload via backend. Sends fileNames as JSON + base64 so Hebrew/Unicode names are preserved (multipart can corrupt them). Uses api so auth token is always attached. */
-  uploadToSharepointBucket: (projectId, files, folderPath = '') => {
+  uploadToSharepointBucket: (projectId, files, folderPath = '', options = {}) => {
     const form = new FormData();
     if (folderPath) form.append('folderPath', folderPath);
     const names = files.map(f => f.name || f.webkitRelativePath || 'file');
@@ -160,19 +173,21 @@ export const projectFiles = {
       form.append('fileNamesB64', btoa(unescape(encodeURIComponent(JSON.stringify(names)))));
     } catch (_) {}
     for (let i = 0; i < files.length; i++) form.append('files', files[i], `file-${i}`);
-    return api.post(`/api/projects/${projectId}/files/upload-to-sharepoint-bucket`, form, { timeout: 120000 }).then(r => r.data);
+    const headers = options.uploadId ? { 'X-Upload-ID': options.uploadId } : {};
+    return api.post(`/api/projects/${projectId}/files/upload-to-sharepoint-bucket`, form, { timeout: 900000, onUploadProgress: options.onUploadProgress, headers }).then(r => r.data);
   },
+  getSharepointUploadProgress: (projectId, uploadId) => api.get(`/api/projects/${projectId}/files/upload-to-sharepoint-bucket/progress`, { params: { uploadId } }).then(r => r.data),
   /** Direct-to-bucket upload using signed URLs (faster). Supabase bucket does not support Hebrew in paths; backend returns ASCII-only storage paths. We send path → original (Hebrew) name to update-display-names so the UI shows Hebrew. When folder name is set or single file, we use backend multipart so fileNames (UTF-8) are preserved the same way. */
-  async uploadToSharepointBucketDirect(projectId, files, folderPath = '') {
+  async uploadToSharepointBucketDirect(projectId, files, folderPath = '', options = {}) {
     const hasFolderName = (folderPath && String(folderPath).trim()) !== '';
     const singleFile = Array.isArray(files) && files.length === 1;
     if (hasFolderName || singleFile) {
-      return this.uploadToSharepointBucket(projectId, files, folderPath);
+      return this.uploadToSharepointBucket(projectId, files, folderPath, options);
     }
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseAnon) {
-      return this.uploadToSharepointBucket(projectId, files, folderPath);
+      return this.uploadToSharepointBucket(projectId, files, folderPath, options);
     }
     const token = getStoredToken();
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -192,11 +207,16 @@ export const projectFiles = {
     const supabase = createClient(supabaseUrl, supabaseAnon);
     const uploaded = [];
     const failed = [];
+    const onProgress = options.onProgress;
+    const totalBytes = files.reduce((s, f) => s + (f.size || 0), 0);
+    let loadedBytes = 0;
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const relativeName = fileDescriptors[i].relativeName;
       const { path, token: uploadToken } = urls[i];
       const { error } = await supabase.storage.from(bucket).uploadToSignedUrl(path, uploadToken, file, { contentType: file.type || 'application/octet-stream' });
+      if (!error) loadedBytes += (file.size || 0);
+      if (onProgress) onProgress(loadedBytes, totalBytes);
       if (error) failed.push({ name: relativeName, error: error.message });
       else uploaded.push({ path, name: relativeName });
     }
@@ -207,13 +227,13 @@ export const projectFiles = {
         const displayName = folderPathNorm ? `${folderPathNorm}/${u.name}`.replace(/\/+/g, '/') : u.name;
         mappings[u.path] = displayName;
       });
-      await axios.post(
+      axios.post(
         `${API_BASE}/api/projects/${projectId}/files/upload-to-sharepoint-bucket/update-display-names`,
         { mappings },
         { headers: { ...headers, 'Content-Type': 'application/json; charset=utf-8' }, timeout: 15000 }
       ).catch(err => { console.warn('SharePoint display names update failed:', err.response?.data?.error || err.message); });
+      axios.post(`${API_BASE}/api/projects/${projectId}/files/upload-to-sharepoint-bucket/invalidate-cache`, {}, { headers }).catch(() => {});
     }
-    await axios.post(`${API_BASE}/api/projects/${projectId}/files/upload-to-sharepoint-bucket/invalidate-cache`, {}, { headers }).catch(() => {});
     return { uploaded: uploaded.length, failed: failed.length, uploaded_paths: uploaded, errors: failed.length ? failed : undefined };
   }
 };
