@@ -1159,6 +1159,9 @@ function RagTab({ projectId }) {
                 const mapKeys = Object.keys(displayNamesMap);
                 console.log('[SharePoint decode] list response:', { filesCount: files.length, displayNamesMapKeys: mapKeys.length, sampleMapKeys: mapKeys.slice(0, 5) });
                 const manualFiles = files.filter(f => (f.path || '').startsWith('manual/'));
+                const missingInMap = manualFiles.filter(f => displayNamesMap[f.path] == null);
+                const inMap = manualFiles.filter(f => displayNamesMap[f.path] != null);
+                console.log('[SharePoint decode] manual files: total=', manualFiles.length, '| in displayNamesMap=', inMap.length, '| MISSING from map (will show קובץ/placeholder)=', missingInMap.length, '| missing paths=', missingInMap.map(f => f.path));
                 manualFiles.slice(0, 10).forEach(f => {
                   console.log('[SharePoint decode] file:', f.path, '| displayName from API:', JSON.stringify(f.displayName), '| in map:', f.path in displayNamesMap, '| map value:', JSON.stringify(displayNamesMap[f.path]));
                 });
