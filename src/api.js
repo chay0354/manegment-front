@@ -6,7 +6,7 @@ const API_BASE = (import.meta.env.VITE_MANEGER_API_URL || 'http://localhost:8001
 
 export const api = axios.create({
   baseURL: API_BASE,
-  timeout: 30000,
+  timeout: 60000,
   headers: { 'Content-Type': 'application/json' }
 });
 
@@ -131,8 +131,10 @@ export const notes = {
   delete: (projectId, noteId) => api.delete(`/api/projects/${projectId}/notes/${noteId}`).then(r => r.data)
 };
 
+const FILE_INGEST_TIMEOUT = 180000; // 3 min – ingest (chunking + embeddings) can be slow
+
 export const projectFiles = {
-  list: (projectId) => api.get(`/api/projects/${projectId}/files`).then(r => r.data),
+  list: (projectId) => api.get(`/api/projects/${projectId}/files`, { timeout: 60000 }).then(r => r.data),
   upload: (projectId, file) => {
     const form = new FormData();
     form.append('file', file);
@@ -161,8 +163,8 @@ export const projectFiles = {
     a.click();
     URL.revokeObjectURL(url);
   },
-  listSharepointBucket: (projectId) => api.get(`/api/projects/${projectId}/files/sharepoint-bucket`, { params: { _: Date.now() } }).then(r => r.data),
-  addFromBucket: (projectId, path, displayName) => api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName }).then(r => r.data),
+  listSharepointBucket: (projectId) => api.get(`/api/projects/${projectId}/files/sharepoint-bucket`, { params: { _: Date.now() }, timeout: 60000 }).then(r => r.data),
+  addFromBucket: (projectId, path, displayName) => api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName }, { timeout: FILE_INGEST_TIMEOUT }).then(r => r.data),
   /** Upload via backend. Sends fileNames as JSON + base64 so Hebrew/Unicode names are preserved (multipart can corrupt them). Uses api so auth token is always attached. */
   uploadToSharepointBucket: (projectId, files, folderPath = '', options = {}) => {
     const form = new FormData();
@@ -198,7 +200,7 @@ export const projectFiles = {
     const { data } = await axios.post(
       `${API_BASE}/api/projects/${projectId}/files/upload-to-sharepoint-bucket/signed-urls`,
       { folderPath, files: fileDescriptors },
-      { headers, timeout: 30000 }
+      { headers, timeout: 60000 }
     );
     const { bucket, urls } = data;
     if (!bucket || !Array.isArray(urls) || urls.length !== files.length) {
