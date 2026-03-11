@@ -3,6 +3,16 @@ import { BrowserRouter, Routes, Route, Link, useParams, useNavigate, Navigate } 
 import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, chat as chatApi, lab as labApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth, getNetworkErrorMessage } from './api';
 import t from './strings';
 
+/** Ensure we never pass an object to setError (React cannot render objects). */
+function errorMessageFromResponse(err, fallback) {
+  const data = err?.response?.data;
+  if (data == null) return typeof fallback === 'string' ? fallback : (err?.message || 'שגיאה');
+  const msg = data.error ?? data.message;
+  if (typeof msg === 'string') return msg;
+  if (msg && typeof msg === 'object' && typeof msg.message === 'string') return msg.message;
+  return typeof fallback === 'string' ? fallback : (err?.message || 'שגיאה');
+}
+
 function Home({ user, onLogout }) {
   const [projects, setProjects] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -1860,7 +1870,7 @@ function LoginView({ onLogin }) {
         navigate('/');
       })
       .catch(err => {
-        setError(err.response?.data?.error || t.loginError);
+        setError(errorMessageFromResponse(err, t.loginError));
         setLoading(false);
       });
   };
@@ -1870,7 +1880,7 @@ function LoginView({ onLogin }) {
       <main className="main" style={{ maxWidth: 420, margin: '40px auto' }}>
         <div className="card tab-card">
           <h2 className="page-title">{t.loginTitle}</h2>
-          {error && <p className="error">{error}</p>}
+          {error && <p className="error">{typeof error === 'string' ? error : String(error)}</p>}
           <form onSubmit={submit}>
             <div className="form-group">
               <label>{t.username}</label>
@@ -1913,7 +1923,7 @@ function SignupView({ onSignup }) {
         navigate('/');
       })
       .catch(err => {
-        setError(err.response?.data?.error || t.signupError);
+        setError(errorMessageFromResponse(err, t.signupError));
         setLoading(false);
       });
   };
@@ -1923,7 +1933,7 @@ function SignupView({ onSignup }) {
       <main className="main" style={{ maxWidth: 420, margin: '40px auto' }}>
         <div className="card tab-card">
           <h2 className="page-title">{t.signupTitle}</h2>
-          {error && <p className="error">{error}</p>}
+          {error && <p className="error">{typeof error === 'string' ? error : String(error)}</p>}
           <form onSubmit={submit}>
             <div className="form-group">
               <label>{t.username}</label>
