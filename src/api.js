@@ -246,38 +246,53 @@ export const projectFiles = {
     }
     const token = getStoredToken();
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const fileDescriptors = files.map(f => ({
-      relativeName: f.name || f.webkitRelativePath || 'file',
-      contentType: f.type || undefined
-    }));
-    const { data } = await axios.post(
-      `${API_BASE}/api/projects/${projectId}/files/upload-to-sharepoint-bucket/signed-urls`,
-      { folderPath, files: fileDescriptors },
-      { headers, timeout: 60000 }
-    );
-    const { bucket, urls } = data;
-    if (!bucket || !Array.isArray(urls) || urls.length !== files.length) {
-      throw new Error('Invalid signed URLs response');
-    }
     const supabase = createClient(supabaseUrl, supabaseAnon);
-    const uploaded = [];
-    const failed = [];
+    const allUploaded = [];
+    const allFailed = [];
     const onProgress = options.onProgress;
     let loadedBytes = 0;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const relativeName = fileDescriptors[i].relativeName;
-      const { path, token: uploadToken } = urls[i];
-      const { error } = await supabase.storage.from(bucket).uploadToSignedUrl(path, uploadToken, file, { contentType: file.type || 'application/octet-stream' });
-      if (!error) loadedBytes += (file.size || 0);
-      if (onProgress) onProgress(loadedBytes, totalBytes);
-      if (error) failed.push({ name: relativeName, error: error.message });
-      else uploaded.push({ path, name: relativeName });
+    const DIRECT_BATCH_SIZE = 50; // backend max per signed-urls request
+    let folderId = null;
+    for (let offset = 0; offset < files.length; offset += DIRECT_BATCH_SIZE) {
+      const batch = files.slice(offset, offset + DIRECT_BATCH_SIZE);
+      const fileDescriptors = batch.map(f => ({
+        relativeName: f.name || f.webkitRelativePath || 'file',
+        contentType: f.type || undefined
+      }));
+      const { data } = await axios.post(
+        `${API_BASE}/api/projects/${projectId}/files/upload-to-sharepoint-bucket/signed-urls`,
+        { folderPath, files: fileDescriptors, folderId: folderId || undefined },
+        { headers, timeout: 120000 }
+      );
+      const { bucket, urls, returnedFolderId } = data;
+      if (!bucket || !Array.isArray(urls) || urls.length !== batch.length) {
+        throw new Error('Invalid signed URLs response');
+      }
+      if (returnedFolderId) folderId = returnedFolderId;
+      for (let i = 0; i < batch.length; i++) {
+        const file = batch[i];
+        const relativeName = fileDescriptors[i].relativeName;
+        const { path, token: uploadToken } = urls[i];
+        let error = null;
+        let result = await supabase.storage.from(bucket).uploadToSignedUrl(path, uploadToken, file, { contentType: file.type || 'application/octet-stream' });
+        error = result.error;
+        if (error) {
+          result = await supabase.storage.from(bucket).uploadToSignedUrl(path, uploadToken, file, { contentType: file.type || 'application/octet-stream' });
+          error = result.error;
+        }
+        if (!error) {
+          loadedBytes += (file.size || 0);
+          allUploaded.push({ path, name: relativeName });
+        } else {
+          allFailed.push({ name: relativeName, error: error.message });
+        }
+        if (onProgress) onProgress(loadedBytes, totalBytes);
+      }
     }
-    if (uploaded.length > 0) {
+    if (allUploaded.length > 0) {
       const mappings = {};
       const folderPathNorm = (folderPath && String(folderPath).trim()) ? String(folderPath).trim().replace(/\/+/g, '/') : '';
-      uploaded.forEach(u => {
+      allUploaded.forEach(u => {
         const displayName = folderPathNorm ? `${folderPathNorm}/${u.name}`.replace(/\/+/g, '/') : u.name;
         mappings[u.path] = displayName;
       });
@@ -288,7 +303,7 @@ export const projectFiles = {
       ).catch(err => { console.warn('SharePoint display names update failed:', err.response?.data?.error || err.message); });
       axios.post(`${API_BASE}/api/projects/${projectId}/files/upload-to-sharepoint-bucket/invalidate-cache`, {}, { headers }).catch(() => {});
     }
-    return { uploaded: uploaded.length, failed: failed.length, uploaded_paths: uploaded, errors: failed.length ? failed : undefined };
+    return { uploaded: allUploaded.length, failed: allFailed.length, uploaded_paths: allUploaded, errors: allFailed.length ? allFailed : undefined };
   }
 };
 
