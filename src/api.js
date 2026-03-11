@@ -169,10 +169,11 @@ export const projectFiles = {
   },
   listSharepointBucket: (projectId) => api.get(`/api/projects/${projectId}/files/sharepoint-bucket`, { params: { _: Date.now() }, timeout: 60000 }).then(r => r.data),
   addFromBucket: (projectId, path, displayName) => api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName }, { timeout: FILE_INGEST_TIMEOUT }).then(r => r.data),
-  /** Upload via backend. Sends fileNames as JSON + base64 so Hebrew/Unicode names are preserved (multipart can corrupt them). Uses api so auth token is always attached. */
+  /** Upload one batch via backend. For chunked upload, pass folderId from previous response. */
   uploadToSharepointBucket: (projectId, files, folderPath = '', options = {}) => {
     const form = new FormData();
     if (folderPath) form.append('folderPath', folderPath);
+    if (options.folderId) form.append('folderId', options.folderId);
     const names = files.map(f => f.name || f.webkitRelativePath || 'file');
     form.append('fileNames', JSON.stringify(names));
     try {
@@ -183,12 +184,56 @@ export const projectFiles = {
     return api.post(`/api/projects/${projectId}/files/upload-to-sharepoint-bucket`, form, { timeout: 900000, onUploadProgress: options.onUploadProgress, headers }).then(r => r.data);
   },
   getSharepointUploadProgress: (projectId, uploadId) => api.get(`/api/projects/${projectId}/files/upload-to-sharepoint-bucket/progress`, { params: { uploadId } }).then(r => r.data),
-  /** Direct-to-bucket upload using signed URLs to avoid Vercel 413 (body limit) and CORS-on-error. File bytes go to Supabase, not the backend; display names are sent via update-display-names. Prefer this whenever Supabase is configured; fall back to backend multipart only when not. */
+  /** Direct-to-bucket upload using signed URLs when Supabase is set; otherwise chunked backend upload so large folders stay under Vercel body limit. */
   async uploadToSharepointBucketDirect(projectId, files, folderPath = '', options = {}) {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const totalBytes = files.reduce((s, f) => s + (f.size || 0), 0);
     if (!supabaseUrl || !supabaseAnon) {
-      return this.uploadToSharepointBucket(projectId, files, folderPath, options);
+      const CHUNK_MAX_BYTES = 3 * 1024 * 1024; // 3 MB per request (under Vercel ~4.5 MB limit)
+      const CHUNK_MAX_FILES = 50;
+      if (totalBytes <= CHUNK_MAX_BYTES && files.length <= CHUNK_MAX_FILES) {
+        return this.uploadToSharepointBucket(projectId, files, folderPath, options);
+      }
+      const batches = [];
+      let batch = [];
+      let batchBytes = 0;
+      for (const file of files) {
+        const size = file.size || 0;
+        if (batch.length > 0 && (batchBytes + size > CHUNK_MAX_BYTES || batch.length >= CHUNK_MAX_FILES)) {
+          batches.push(batch);
+          batch = [];
+          batchBytes = 0;
+        }
+        batch.push(file);
+        batchBytes += size;
+      }
+      if (batch.length) batches.push(batch);
+      let folderId = null;
+      const allUploaded = [];
+      let totalFailed = 0;
+      const allErrors = [];
+      let loadedSoFar = 0;
+      for (let i = 0; i < batches.length; i++) {
+        const chunkOpts = { ...options, folderId: folderId || undefined };
+        if (options.onUploadProgress) {
+          chunkOpts.onUploadProgress = (e) => {
+            const chunkLoaded = e.loaded != null ? e.loaded : 0;
+            const loaded = loadedSoFar + chunkLoaded;
+            options.onUploadProgress({ loaded, total: totalBytes });
+            if (options.onProgress) options.onProgress(loaded, totalBytes);
+          };
+        }
+        const res = await this.uploadToSharepointBucket(projectId, batches[i], folderPath, chunkOpts);
+        if (res.folderId) folderId = res.folderId;
+        if (res.uploaded_paths) allUploaded.push(...res.uploaded_paths);
+        if (res.failed) totalFailed += res.failed;
+        if (res.errors) allErrors.push(...res.errors);
+        loadedSoFar += batches[i].reduce((s, f) => s + (f.size || 0), 0);
+        if (options.onUploadProgress) options.onUploadProgress({ loaded: loadedSoFar, total: totalBytes });
+        if (options.onProgress) options.onProgress(loadedSoFar, totalBytes);
+      }
+      return { uploaded: allUploaded.length, failed: totalFailed, uploaded_paths: allUploaded, errors: allErrors.length ? allErrors : undefined };
     }
     const token = getStoredToken();
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -209,7 +254,6 @@ export const projectFiles = {
     const uploaded = [];
     const failed = [];
     const onProgress = options.onProgress;
-    const totalBytes = files.reduce((s, f) => s + (f.size || 0), 0);
     let loadedBytes = 0;
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
