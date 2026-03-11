@@ -184,10 +184,19 @@ export const projectFiles = {
     return api.post(`/api/projects/${projectId}/files/upload-to-sharepoint-bucket`, form, { timeout: 900000, onUploadProgress: options.onUploadProgress, headers }).then(r => r.data);
   },
   getSharepointUploadProgress: (projectId, uploadId) => api.get(`/api/projects/${projectId}/files/upload-to-sharepoint-bucket/progress`, { params: { uploadId } }).then(r => r.data),
-  /** Direct-to-bucket upload using signed URLs when Supabase is set; otherwise chunked backend upload so large folders stay under Vercel body limit. */
+  /** Direct-to-bucket upload using signed URLs when Supabase is set (env or API config); otherwise chunked backend upload. Prefer direct to avoid 413 on Vercel. */
   async uploadToSharepointBucketDirect(projectId, files, folderPath = '', options = {}) {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    let supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    let supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnon) {
+      try {
+        const cfg = await api.get(`/api/projects/${projectId}/files/upload-to-sharepoint-bucket/config`).then(r => r.data);
+        if (cfg?.useDirectUpload && cfg.supabaseUrl && cfg.supabaseAnonKey) {
+          supabaseUrl = cfg.supabaseUrl;
+          supabaseAnon = cfg.supabaseAnonKey;
+        }
+      } catch (_) {}
+    }
     const totalBytes = files.reduce((s, f) => s + (f.size || 0), 0);
     if (!supabaseUrl || !supabaseAnon) {
       const CHUNK_MAX_BYTES = 3 * 1024 * 1024; // 3 MB per request (under Vercel ~4.5 MB limit)
