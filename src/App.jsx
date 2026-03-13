@@ -67,26 +67,34 @@ function Home({ user, onLogout }) {
   };
 
   return (
-    <div className="app-shell" dir="rtl">
-      <aside className="sidebar">
-        <h1>{t.appTitle}</h1>
-        <nav>
-          <Link to="/">{t.allProjects}</Link>
-        </nav>
-        {user && (
-          <div className="sidebar-user">
-            <span>{user.username}</span>
-            <button type="button" className="secondary" onClick={onLogout}>{t.logout}</button>
-          </div>
-        )}
-      </aside>
+    <div className="app-shell app-shell-no-sidebar" dir="rtl">
       <main className="main">
-        <h2 className="page-title">{t.projects}</h2>
-        {error && <p className="error">{error}</p>}
-        <div className="flex gap" style={{ flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
-          <input type="search" placeholder={t.searchProjects} value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 280 }} />
-          <button onClick={() => setShowNew(!showNew)}>{showNew ? t.cancel : `+ ${t.newProject}`}</button>
-        </div>
+        <header className="main-header">
+          <div className="main-header-search">
+            <input type="search" placeholder={t.searchProjects} value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <div className="main-header-actions">
+            {user && (
+              <>
+                <div className="main-header-user">
+                  <div className="main-header-avatar">{(user.username || 'A').charAt(0).toUpperCase()}</div>
+                  <div>
+                    <div className="main-header-user-name">{user.username}</div>
+                    <div className="main-header-user-email">{user.email || 'admin'}</div>
+                  </div>
+                </div>
+                <button type="button" className="secondary" onClick={onLogout}>{t.logout}</button>
+              </>
+            )}
+          </div>
+        </header>
+        <div className="main-content">
+          <h1 className="page-title">{t.projects}</h1>
+          <p className="page-subtitle">נהל את הפרויקטים והמשימות שלך במקום אחד.</p>
+          {error && <p className="error">{error}</p>}
+          <div className="main-content-toolbar">
+            <button onClick={() => setShowNew(!showNew)}>{showNew ? t.cancel : `+ ${t.newProject}`}</button>
+          </div>
         {showNew && (
           <div className="card">
             <h3>{t.newProject}</h3>
@@ -114,6 +122,7 @@ function Home({ user, onLogout }) {
         )}
         {!loading && filteredProjects.length === 0 && !showNew && <p className="loading">{search.trim() ? t.noResults : t.noProjectsYet}</p>}
 
+        </div>
         {requestProject && (
           <div className="modal-overlay" onClick={() => setRequestProject(null)}>
             <div className="card modal" onClick={e => e.stopPropagation()}>
@@ -146,7 +155,7 @@ function ProjectView({ user, onLogout }) {
   const navigate = useNavigate();
   const [project, setProject] = React.useState(null);
   const [projectRole, setProjectRole] = React.useState(null);
-  const [tab, setTab] = React.useState('overview');
+  const [fullScreenSection, setFullScreenSection] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
 
@@ -158,44 +167,113 @@ function ProjectView({ user, onLogout }) {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading || !project) return <div className="main" dir="rtl"><p className="loading">{t.loading}</p></div>;
-  if (error) return <div className="main" dir="rtl"><p className="error">{error}</p><button onClick={() => navigate('/')}>{t.back}</button></div>;
+  const [overviewCounts, setOverviewCounts] = React.useState({ tasks: 0, tasksDone: 0, milestones: 0, milestonesDone: 0, notes: 0 });
+  React.useEffect(() => {
+    if (!id) return;
+    Promise.all([tasksApi.list(id), milestonesApi.list(id), notesApi.list(id)])
+      .then(([tRes, mRes, nRes]) => {
+        const tasks = tRes.tasks || [];
+        const milestones = mRes.milestones || [];
+        const notes = nRes.notes || [];
+        const tasksDone = tasks.filter(t => t.status === 'done').length;
+        const milestonesDone = milestones.filter(m => m.completed_at).length;
+        setOverviewCounts({ tasks: tasks.length, tasksDone, milestones: milestones.length, milestonesDone, notes: notes.length });
+      })
+      .catch(() => {});
+  }, [id]);
+
+  if (loading || !project) return <div className="app-shell" dir="rtl"><main className="main"><div className="main-content"><p className="loading">{t.loading}</p></div></main></div>;
+  if (error) return <div className="app-shell" dir="rtl"><main className="main"><div className="main-content"><p className="error">{error}</p><button onClick={() => navigate('/')}>{t.back}</button></div></main></div>;
+
+  const taskPending = overviewCounts.tasks - overviewCounts.tasksDone;
 
   return (
-    <div className="app-shell" dir="rtl">
-      <aside className="sidebar">
-        <h1>{t.appTitle}</h1>
-        <nav>
-          <Link to="/">{t.allProjects}</Link>
-        </nav>
-        {user && (
-          <div className="sidebar-user">
-            <span>{user.username}</span>
-            <button type="button" className="secondary" onClick={onLogout}>{t.logout}</button>
-          </div>
-        )}
-        <p style={{ marginTop: 16, fontSize: '0.9rem', color: 'var(--muted)' }}>{project.name}</p>
-      </aside>
+    <div className="app-shell app-shell-no-sidebar" dir="rtl">
       <main className="main">
-        <div className="flex gap" style={{ alignItems: 'center', marginBottom: 20 }}>
-          <button className="secondary" onClick={() => navigate('/')}>← {t.back}</button>
-          <h2 className="page-title mb-0">{project.name}</h2>
-        </div>
-        {project.description && <p style={{ color: 'var(--muted)', marginBottom: 20 }}>{project.description}</p>}
-        <div className="tabs">
-          {TABS.map(tabId => (
-            <button key={tabId} className={tab === tabId ? 'active' : ''} onClick={() => setTab(tabId)}>{TAB_LABELS[tabId]}</button>
-          ))}
-        </div>
-        <div className="tab-content">
-          {tab === 'overview' && <Overview projectId={id} project={project} />}
-          {tab === 'tasks' && <TasksTab projectId={id} />}
-          {tab === 'milestones' && <MilestonesTab projectId={id} />}
-{tab === 'notes' && <NotesTab projectId={id} />}
-        {tab === 'lab' && <LabTab projectId={id} />}
-        {tab === 'rag' && <RagTab projectId={id} />}
-        {tab === 'chat' && <ChatTab projectId={id} />}
-        {tab === 'settings' && <SettingsTab projectId={id} project={project} setProject={setProject} navigate={navigate} projectRole={projectRole} user={user} />}
+        <header className="main-header">
+          <div className="main-header-search">
+            <input type="search" placeholder="חיפוש משימה..." dir="rtl" />
+          </div>
+          <div className="main-header-actions">
+            <Link to="/" className="header-link">📊 {t.allProjects}</Link>
+            {user && (
+              <>
+                <div className="main-header-user">
+                  <div className="main-header-avatar">{(user.username || 'A').charAt(0).toUpperCase()}</div>
+                  <div>
+                    <div className="main-header-user-name">{user.username}</div>
+                    <div className="main-header-user-email">{user.email || 'admin'}</div>
+                  </div>
+                </div>
+                <button type="button" className="secondary" onClick={onLogout}>{t.logout}</button>
+              </>
+            )}
+          </div>
+        </header>
+        <div className="main-content">
+          <div className="flex gap" style={{ alignItems: 'center', marginBottom: 8 }}>
+            <button className="secondary" onClick={() => navigate('/')}>← {t.back}</button>
+          </div>
+          <h1 className="page-title">{project.name}</h1>
+          {project.description ? <p className="page-subtitle">{project.description}</p> : <p className="page-subtitle">תכנן, עדכן והשלם משימות ואבני דרך.</p>}
+          <div className="overview-cards-row">
+            <div className="overview-card-item primary">
+              <span className="card-icon">📋</span>
+              <div className="overview-card-value">{overviewCounts.tasks}</div>
+              <div className="overview-card-label">{t.tasksCount}</div>
+              <div className="overview-card-meta">{overviewCounts.tasksDone} {t.completed}</div>
+            </div>
+            <div className="overview-card-item">
+              <span className="card-icon">✓</span>
+              <div className="overview-card-value">{overviewCounts.tasksDone}</div>
+              <div className="overview-card-label">{t.completed}</div>
+              <div className="overview-card-meta">{t.tasks}</div>
+            </div>
+            <div className="overview-card-item">
+              <span className="card-icon">🎯</span>
+              <div className="overview-card-value">{overviewCounts.milestones}</div>
+              <div className="overview-card-label">{t.milestonesCount}</div>
+              <div className="overview-card-meta">{overviewCounts.milestonesDone} {t.completedMilestones}</div>
+            </div>
+            <div className="overview-card-item">
+              <span className="card-icon">📝</span>
+              <div className="overview-card-value">{overviewCounts.notes}</div>
+              <div className="overview-card-label">{t.notesCount}</div>
+              <div className="overview-card-meta">{t.notes}</div>
+            </div>
+          </div>
+          <div className="widgets-grid">
+            {TABS.map(tabId => (
+              <button key={tabId} type="button" className="widget-card" onClick={() => setFullScreenSection(tabId)}>
+                <span className="widget-card-icon">{tabId === 'overview' ? '📊' : tabId === 'tasks' ? '📋' : tabId === 'milestones' ? '🎯' : tabId === 'notes' ? '📝' : tabId === 'lab' ? '🧪' : tabId === 'rag' ? '📁' : tabId === 'chat' ? '💬' : '⚙️'}</span>
+                <span className="widget-card-title">{TAB_LABELS[tabId]}</span>
+                {tabId === 'overview' && <span className="widget-card-meta">{overviewCounts.tasks} {t.tasks}, {overviewCounts.milestones} {t.milestones}</span>}
+                {tabId === 'tasks' && <span className="widget-card-meta">{overviewCounts.tasks} {t.tasks}</span>}
+                {tabId === 'milestones' && <span className="widget-card-meta">{overviewCounts.milestones} {t.milestones}</span>}
+                {tabId === 'notes' && <span className="widget-card-meta">{overviewCounts.notes} {t.notes}</span>}
+              </button>
+            ))}
+          </div>
+          {fullScreenSection && (
+            <div className="fullscreen-overlay" role="dialog" aria-modal="true" aria-label={TAB_LABELS[fullScreenSection]}>
+              <div className="fullscreen-content">
+                <div className="fullscreen-header">
+                  <h2 className="fullscreen-title">{TAB_LABELS[fullScreenSection]}</h2>
+                  <button type="button" className="fullscreen-close" onClick={() => setFullScreenSection(null)} aria-label={t.cancel}>×</button>
+                </div>
+                <div className="fullscreen-body modal-scroll">
+                  {fullScreenSection === 'overview' && <Overview projectId={id} project={project} />}
+                  {fullScreenSection === 'tasks' && <TasksTab projectId={id} />}
+                  {fullScreenSection === 'milestones' && <MilestonesTab projectId={id} />}
+                  {fullScreenSection === 'notes' && <NotesTab projectId={id} />}
+                  {fullScreenSection === 'lab' && <LabTab projectId={id} />}
+                  {fullScreenSection === 'rag' && <RagTab projectId={id} />}
+                  {fullScreenSection === 'chat' && <ChatTab projectId={id} />}
+                  {fullScreenSection === 'settings' && <SettingsTab projectId={id} project={project} setProject={setProject} navigate={navigate} projectRole={projectRole} user={user} />}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
@@ -1880,27 +1958,25 @@ function LoginView({ onLogin }) {
 
   return (
     <div className="app-shell" dir="rtl">
-      <main className="main" style={{ maxWidth: 420, margin: '40px auto' }}>
-        <div className="card tab-card">
-          <h2 className="page-title">{t.loginTitle}</h2>
-          {error && <p className="error">{typeof error === 'string' ? error : String(error)}</p>}
-          <form onSubmit={submit}>
-            <div className="form-group">
-              <label>{t.username}</label>
-              <input value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" required />
-            </div>
-            <div className="form-group">
-              <label>{t.password}</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" required />
-            </div>
-            <div className="flex gap">
-              <button type="submit" disabled={loading} className={loading ? 'btn-loading' : ''}>{loading ? t.loading : t.loginButton}</button>
-              <Link to="/signup" className="secondary" style={{ alignSelf: 'center' }}>{t.signup}</Link>
-            </div>
-          </form>
-          <p style={{ marginTop: 16, color: 'var(--muted)' }}>{t.noAccount} <Link to="/signup">{t.signup}</Link></p>
-        </div>
-      </main>
+      <div className="card tab-card auth-card" style={{ maxWidth: 340, margin: '40px auto' }}>
+        <h2 className="page-title">{t.loginTitle}</h2>
+        {error && <p className="error">{typeof error === 'string' ? error : String(error)}</p>}
+        <form onSubmit={submit}>
+          <div className="form-group">
+            <label>{t.username}</label>
+            <input value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" required />
+          </div>
+          <div className="form-group">
+            <label>{t.password}</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" required />
+          </div>
+          <div className="flex gap">
+            <button type="submit" disabled={loading} className={loading ? 'btn-loading' : ''}>{loading ? t.loading : t.loginButton}</button>
+            <Link to="/signup" className="secondary" style={{ alignSelf: 'center' }}>{t.signup}</Link>
+          </div>
+        </form>
+        <p className="auth-footer-p" style={{ color: 'var(--muted)' }}>{t.noAccount} <Link to="/signup">{t.signup}</Link></p>
+      </div>
     </div>
   );
 }
@@ -1933,35 +2009,33 @@ function SignupView({ onSignup }) {
 
   return (
     <div className="app-shell" dir="rtl">
-      <main className="main" style={{ maxWidth: 420, margin: '40px auto' }}>
-        <div className="card tab-card">
-          <h2 className="page-title">{t.signupTitle}</h2>
-          {error && <p className="error">{typeof error === 'string' ? error : String(error)}</p>}
-          <form onSubmit={submit}>
-            <div className="form-group">
-              <label>{t.username}</label>
-              <input value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" required />
-            </div>
-            <div className="form-group">
-              <label>{t.email}</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" required />
-            </div>
-            <div className="form-group">
-              <label>{t.password}</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" required />
-            </div>
-            <div className="form-group">
-              <label>{t.fullName}</label>
-              <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder={t.optional} autoComplete="name" />
-            </div>
-            <div className="flex gap">
-              <button type="submit" disabled={loading} className={loading ? 'btn-loading' : ''}>{loading ? t.loading : t.signupButton}</button>
-              <Link to="/login" style={{ alignSelf: 'center' }}>{t.login}</Link>
-            </div>
-          </form>
-          <p style={{ marginTop: 16, color: 'var(--muted)' }}>{t.haveAccount} <Link to="/login">{t.login}</Link></p>
-        </div>
-      </main>
+      <div className="card tab-card auth-card" style={{ maxWidth: 340, margin: '40px auto' }}>
+        <h2 className="page-title">{t.signupTitle}</h2>
+        {error && <p className="error">{typeof error === 'string' ? error : String(error)}</p>}
+        <form onSubmit={submit}>
+          <div className="form-group">
+            <label>{t.username}</label>
+            <input value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" required />
+          </div>
+          <div className="form-group">
+            <label>{t.email}</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" required />
+          </div>
+          <div className="form-group">
+            <label>{t.password}</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" required />
+          </div>
+          <div className="form-group">
+            <label>{t.fullName}</label>
+            <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder={t.optional} autoComplete="name" />
+          </div>
+          <div className="flex gap">
+            <button type="submit" disabled={loading} className={loading ? 'btn-loading' : ''}>{loading ? t.loading : t.signupButton}</button>
+            <Link to="/login" style={{ alignSelf: 'center' }}>{t.login}</Link>
+          </div>
+        </form>
+        <p className="auth-footer-p" style={{ color: 'var(--muted)' }}>{t.haveAccount} <Link to="/login">{t.login}</Link></p>
+      </div>
     </div>
   );
 }
