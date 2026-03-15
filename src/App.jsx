@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Link, useParams, useNavigate, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, NavLink, Outlet, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, chat as chatApi, lab as labApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth, getNetworkErrorMessage } from './api';
 import t from './strings';
 
@@ -13,7 +13,52 @@ function errorMessageFromResponse(err, fallback) {
   return typeof fallback === 'string' ? fallback : (err?.message || 'שגיאה');
 }
 
-function Home({ user, onLogout }) {
+/** Sidebar only when a project is selected; otherwise full-width main */
+function AuthenticatedLayout({ user, onLogout }) {
+  const { id } = useParams();
+  const location = useLocation();
+  const isProject = Boolean(id);
+  const section = location.pathname.match(/\/project\/[^/]+\/section\/([^/]+)/)?.[1];
+
+  return (
+    <div className={`app-shell ${isProject ? '' : 'app-shell-no-sidebar'}`} dir="rtl">
+      {isProject && (
+        <aside className="sidebar">
+          <div className="sidebar-brand">
+            <span className="sidebar-brand-icon">🧪</span>
+            <span className="sidebar-brand-text">{t.appTitle}</span>
+          </div>
+          <nav className="sidebar-nav">
+            <NavLink to="/" className={({ isActive }) => (isActive ? 'active' : '')} end>
+              📊 {t.navDashboard}
+            </NavLink>
+            <NavLink to="/projects" className={({ isActive }) => (isActive ? 'active' : '')}>
+              📁 {t.navProjects}
+            </NavLink>
+            <Link to={`/project/${id}/section/lab`} className={section === 'lab' ? 'active' : ''}>🧪 {t.navExperiments}</Link>
+            <Link to={`/project/${id}/section/rag`} className={section === 'rag' ? 'active' : ''}>📁 {t.navDocuments}</Link>
+            <Link to={`/project/${id}/section/settings`} className={section === 'settings' ? 'active' : ''}>⚙️ {t.navSettings}</Link>
+          </nav>
+          <div className="sidebar-user">
+            <div className="main-header-user" style={{ padding: '8px 0' }}>
+              <div className="main-header-avatar">{(user?.username || 'A').charAt(0).toUpperCase()}</div>
+              <div>
+                <div className="main-header-user-name">{user?.username}</div>
+                <div className="main-header-user-email">{user?.email || ''}</div>
+              </div>
+            </div>
+            <button type="button" className="secondary" style={{ width: '100%' }} onClick={onLogout}>{t.logout}</button>
+          </div>
+        </aside>
+      )}
+      <main className="main">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
+
+function Home({ user, onLogout, dashboardMode = false }) {
   const [projects, setProjects] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
@@ -25,11 +70,33 @@ function Home({ user, onLogout }) {
   const [requestSending, setRequestSending] = React.useState(false);
   const [creatingProject, setCreatingProject] = React.useState(false);
   const [loadingProjectId, setLoadingProjectId] = React.useState(null);
+  const [totalTasks, setTotalTasks] = React.useState(0);
+  const [totalFiles, setTotalFiles] = React.useState(0);
   const navigate = useNavigate();
 
   React.useEffect(() => {
     projectsApi.list().then(d => { setProjects(d.projects || []); setLoading(false); }).catch(e => { setError(e.message); setLoading(false); });
   }, []);
+
+  React.useEffect(() => {
+    if (projects.length === 0) { setTotalTasks(0); return; }
+    Promise.all(projects.map(p => tasksApi.list(p.id)))
+      .then(results => {
+        const total = results.reduce((sum, r) => sum + (r.tasks || []).length, 0);
+        setTotalTasks(total);
+      })
+      .catch(() => setTotalTasks(0));
+  }, [projects]);
+
+  React.useEffect(() => {
+    if (projects.length === 0) { setTotalFiles(0); return; }
+    Promise.all(projects.map(p => projectFilesApi.list(p.id)))
+      .then(results => {
+        const total = results.reduce((sum, r) => sum + (r.files || []).length, 0);
+        setTotalFiles(total);
+      })
+      .catch(() => setTotalFiles(0));
+  }, [projects]);
 
   const filteredProjects = !search.trim() ? projects : projects.filter(p =>
     (p.name || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -66,31 +133,53 @@ function Home({ user, onLogout }) {
       .finally(() => setCreatingProject(false));
   };
 
+  const recentProjects = filteredProjects.slice(0, 5);
+
   return (
-    <div className="app-shell app-shell-no-sidebar" dir="rtl">
-      <main className="main">
+    <>
         <header className="main-header">
           <div className="main-header-search">
             <input type="search" placeholder={t.searchProjects} value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <div className="main-header-actions">
-            {user && (
-              <>
-                <div className="main-header-user">
-                  <div className="main-header-avatar">{(user.username || 'A').charAt(0).toUpperCase()}</div>
-                  <div>
-                    <div className="main-header-user-name">{user.username}</div>
-                    <div className="main-header-user-email">{user.email || 'admin'}</div>
-                  </div>
-                </div>
-                <button type="button" className="secondary" onClick={onLogout}>{t.logout}</button>
-              </>
-            )}
-          </div>
+          <div className="main-header-actions" style={{ minWidth: 0 }} />
         </header>
         <div className="main-content">
-          <h1 className="page-title">{t.projects}</h1>
-          <p className="page-subtitle">נהל את הפרויקטים והמשימות שלך במקום אחד.</p>
+          {dashboardMode && (
+            <>
+              <h1 className="page-title">{t.dashboard}</h1>
+              <p className="page-subtitle">סקירה מרכזית של המעבדה – פרויקטים, ניסויים ופעילות.</p>
+              <div className="dashboard-summary-row">
+                <div className="dashboard-summary-card">
+                  <span className="dashboard-summary-value">{projects.length}</span>
+                  <span className="dashboard-summary-label">{t.projects}</span>
+                </div>
+                <div className="dashboard-summary-card">
+                  <span className="dashboard-summary-value">{totalTasks}</span>
+                  <span className="dashboard-summary-label">{t.tasksCount}</span>
+                </div>
+                <div className="dashboard-summary-card">
+                  <span className="dashboard-summary-value">{totalFiles}</span>
+                  <span className="dashboard-summary-label">{t.filesCount}</span>
+                </div>
+              </div>
+              {recentProjects.length > 0 && (
+                <div className="dashboard-recent-card card">
+                  <h3>{t.recentActivity}</h3>
+                  <ul className="dashboard-recent-list">
+                    {recentProjects.map(p => (
+                      <li key={p.id}><button type="button" className="link" onClick={() => onProjectClick(p)}>{p.name}</button></li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+          {!dashboardMode && (
+            <>
+              <h1 className="page-title">{t.projects}</h1>
+              <p className="page-subtitle">נהל את הפרויקטים והמשימות שלך במקום אחד.</p>
+            </>
+          )}
           {error && <p className="error">{error}</p>}
           <div className="main-content-toolbar">
             <button onClick={() => setShowNew(!showNew)}>{showNew ? t.cancel : `+ ${t.newProject}`}</button>
@@ -142,8 +231,7 @@ function Home({ user, onLogout }) {
             </div>
           </div>
         )}
-      </main>
-    </div>
+    </>
   );
 }
 
@@ -156,7 +244,6 @@ function ProjectView({ user, onLogout }) {
   const navigate = useNavigate();
   const [project, setProject] = React.useState(null);
   const [projectRole, setProjectRole] = React.useState(null);
-  const [fullScreenSection, setFullScreenSection] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
 
@@ -183,14 +270,25 @@ function ProjectView({ user, onLogout }) {
       .catch(() => {});
   }, [id]);
 
-  if (loading || !project) return <div className="app-shell" dir="rtl"><main className="main"><div className="main-content"><p className="loading">{t.loading}</p></div></main></div>;
-  if (error) return <div className="app-shell" dir="rtl"><main className="main"><div className="main-content"><p className="error">{error}</p><button onClick={() => navigate('/')}>{t.back}</button></div></main></div>;
+  const { sectionId } = useParams();
+  const [fullScreenSectionState, setFullScreenSectionState] = React.useState(null);
+  const fullScreenSection = (sectionId && TABS.includes(sectionId) ? sectionId : null) || fullScreenSectionState;
+  const setFullScreenSection = (s) => {
+    setFullScreenSectionState(s);
+    if (s) navigate(`/project/${id}/section/${s}`, { replace: true });
+    else navigate(`/project/${id}`, { replace: true });
+  };
+  React.useEffect(() => {
+    if (sectionId && TABS.includes(sectionId)) setFullScreenSectionState(sectionId);
+  }, [sectionId]);
+
+  if (loading || !project) return <div className="main-content"><p className="loading">{t.loading}</p></div>;
+  if (error) return <div className="main-content"><p className="error">{error}</p><button onClick={() => navigate('/')}>{t.back}</button></div>;
 
   const taskPending = overviewCounts.tasks - overviewCounts.tasksDone;
 
   return (
-    <div className="app-shell app-shell-no-sidebar" dir="rtl">
-      <main className="main">
+    <>
         <header className="main-header">
           <div className="main-header-search">
             <input type="search" placeholder="חיפוש משימה..." dir="rtl" />
@@ -276,8 +374,7 @@ function ProjectView({ user, onLogout }) {
             </div>
           )}
         </div>
-      </main>
-    </div>
+    </>
   );
 }
 
@@ -291,6 +388,7 @@ function Overview({ projectId, project }) {
   const [milestones, setMilestones] = React.useState([]);
   const [notesCount, setNotesCount] = React.useState(0);
   const [filesCount, setFilesCount] = React.useState(0);
+  const [experimentsSummary, setExperimentsSummary] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -306,6 +404,16 @@ function Overview({ projectId, project }) {
       setFilesCount((fRes.files || []).length);
       setLoading(false);
     });
+  }, [projectId]);
+
+  React.useEffect(() => {
+    labApi.experiments(projectId).then(r => {
+      const experiments = r.experiments || [];
+      const success = experiments.filter(e => (e.experiment_outcome || '').toLowerCase() === 'success').length;
+      const failure = experiments.filter(e => ['failure', 'partial', 'failed'].includes((e.experiment_outcome || '').toLowerCase())).length;
+      const openCount = experiments.length - success - failure;
+      setExperimentsSummary({ total: experiments.length, success, failure, open: openCount });
+    }).catch(() => setExperimentsSummary(null));
   }, [projectId]);
 
   const taskDone = tasks.filter(x => x.status === 'done').length;
@@ -340,6 +448,18 @@ function Overview({ projectId, project }) {
         <h3>{t.overview}</h3>
         <button type="button" className="secondary" onClick={exportSummary}>{t.exportSummary}</button>
       </div>
+
+      {experimentsSummary && experimentsSummary.total > 0 && (
+        <div className="overview-experiments-summary">
+          <label>{t.experimentsSummary}</label>
+          <div className="overview-summary overview-summary-inline">
+            <span>{t.labExperiments}: <strong>{experimentsSummary.total}</strong></span>
+            <span>{t.successes}: <strong>{experimentsSummary.success}</strong></span>
+            <span>{t.failures}: <strong>{experimentsSummary.failure}</strong></span>
+            <span>{t.openExperiments}: <strong>{experimentsSummary.open}</strong></span>
+          </div>
+        </div>
+      )}
 
       <div className="overview-summary">
         <span>{t.tasksCount}: <strong>{tasks.length}</strong></span>
@@ -2074,8 +2194,12 @@ export default function App() {
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginView onLogin={setUser} />} />
         <Route path="/signup" element={user ? <Navigate to="/" replace /> : <SignupView onSignup={setUser} />} />
-        <Route path="/" element={<ProtectedRoute user={user}><Home user={user} onLogout={handleLogout} /></ProtectedRoute>} />
-        <Route path="/project/:id" element={<ProtectedRoute user={user}><ProjectView user={user} onLogout={handleLogout} /></ProtectedRoute>} />
+        <Route path="/" element={<ProtectedRoute user={user}><AuthenticatedLayout user={user} onLogout={handleLogout} /></ProtectedRoute>}>
+          <Route index element={<Home user={user} onLogout={handleLogout} dashboardMode />} />
+          <Route path="projects" element={<Home user={user} onLogout={handleLogout} />} />
+          <Route path="project/:id" element={<ProjectView user={user} onLogout={handleLogout} />} />
+          <Route path="project/:id/section/:sectionId" element={<ProjectView user={user} onLogout={handleLogout} />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );
