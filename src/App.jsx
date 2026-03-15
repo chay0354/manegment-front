@@ -149,6 +149,7 @@ function Home({ user, onLogout }) {
 
 const TABS = ['overview', 'tasks', 'milestones', 'notes', 'lab', 'rag', 'chat', 'settings'];
 const TAB_LABELS = { overview: `📊 ${t.overview}`, tasks: `📋 ${t.tasks}`, milestones: `🎯 ${t.milestones}`, notes: `📝 ${t.notes}`, lab: `🧪 ${t.labTab}`, rag: `📁 ${t.docsManagementTab}`, chat: `💬 ${t.chat}`, settings: `⚙️ ${t.settings}` };
+const TAB_TITLES = { overview: t.overview, tasks: t.tasks, milestones: t.milestones, notes: t.notes, lab: t.labTab, rag: t.docsManagementTab, chat: t.chat, settings: t.settings };
 
 function ProjectView({ user, onLogout }) {
   const { id } = useParams();
@@ -246,7 +247,7 @@ function ProjectView({ user, onLogout }) {
             {TABS.map(tabId => (
               <button key={tabId} type="button" className="widget-card" onClick={() => setFullScreenSection(tabId)}>
                 <span className="widget-card-icon">{tabId === 'overview' ? '📊' : tabId === 'tasks' ? '📋' : tabId === 'milestones' ? '🎯' : tabId === 'notes' ? '📝' : tabId === 'lab' ? '🧪' : tabId === 'rag' ? '📁' : tabId === 'chat' ? '💬' : '⚙️'}</span>
-                <span className="widget-card-title">{TAB_LABELS[tabId]}</span>
+                <span className="widget-card-title">{TAB_TITLES[tabId]}</span>
                 {tabId === 'overview' && <span className="widget-card-meta">{overviewCounts.tasks} {t.tasks}, {overviewCounts.milestones} {t.milestones}</span>}
                 {tabId === 'tasks' && <span className="widget-card-meta">{overviewCounts.tasks} {t.tasks}</span>}
                 {tabId === 'milestones' && <span className="widget-card-meta">{overviewCounts.milestones} {t.milestones}</span>}
