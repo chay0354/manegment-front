@@ -73,6 +73,10 @@ function Home({ user, onLogout, dashboardMode = false }) {
   const [loadingProjectId, setLoadingProjectId] = React.useState(null);
   const [totalTasks, setTotalTasks] = React.useState(0);
   const [totalFiles, setTotalFiles] = React.useState(0);
+  const [totalExperiments, setTotalExperiments] = React.useState(0);
+  const [totalMaterials, setTotalMaterials] = React.useState(0);
+  const [recentExperimentsList, setRecentExperimentsList] = React.useState([]);
+  const [recentDocumentsList, setRecentDocumentsList] = React.useState([]);
   const navigate = useNavigate();
 
   React.useEffect(() => {
@@ -90,13 +94,45 @@ function Home({ user, onLogout, dashboardMode = false }) {
   }, [projects]);
 
   React.useEffect(() => {
-    if (projects.length === 0) { setTotalFiles(0); return; }
+    if (projects.length === 0) { setTotalFiles(0); setRecentDocumentsList([]); return; }
     Promise.all(projects.map(p => projectFilesApi.list(p.id)))
       .then(results => {
-        const total = results.reduce((sum, r) => sum + (r.files || []).length, 0);
+        let total = 0;
+        const withProject = [];
+        results.forEach((r, i) => {
+          const list = r.files || [];
+          total += list.length;
+          const proj = projects[i];
+          list.forEach(f => withProject.push({ ...f, projectId: proj?.id, projectName: proj?.name || '' }));
+        });
         setTotalFiles(total);
+        const sorted = withProject
+          .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+          .slice(0, 10);
+        setRecentDocumentsList(sorted);
       })
-      .catch(() => setTotalFiles(0));
+      .catch(() => { setTotalFiles(0); setRecentDocumentsList([]); });
+  }, [projects]);
+
+  React.useEffect(() => {
+    if (projects.length === 0) { setTotalExperiments(0); setTotalMaterials(0); setRecentExperimentsList([]); return; }
+    const limit = Math.min(projects.length, 15);
+    const slice = projects.slice(0, limit);
+    Promise.all([
+      ...slice.map(p => labApi.experiments(p.id, { limit: 50 }).then(r => ({ projectId: p.id, projectName: p.name, experiments: r.experiments || [] }))),
+      ...slice.map(p => labApi.materialLibrary(p.id).then(r => ({ count: (r.materials || r || []).length })))
+    ]).then(all => {
+      const expResults = all.slice(0, limit);
+      const matResults = all.slice(limit, limit * 2);
+      setTotalExperiments(expResults.reduce((s, x) => s + (x.experiments || []).length, 0));
+      setTotalMaterials(matResults.reduce((s, x) => s + (x.count || 0), 0));
+      const flat = [];
+      expResults.forEach(({ projectId, projectName, experiments }) => {
+        (experiments || []).forEach(e => flat.push({ ...e, projectId, projectName }));
+      });
+      const sorted = flat.sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0)).slice(0, 10);
+      setRecentExperimentsList(sorted);
+    }).catch(() => { setTotalExperiments(0); setTotalMaterials(0); setRecentExperimentsList([]); });
   }, [projects]);
 
   const filteredProjects = !search.trim() ? projects : projects.filter(p =>
@@ -160,32 +196,89 @@ function Home({ user, onLogout, dashboardMode = false }) {
         <div className="main-content">
           {dashboardMode && (
             <>
-              <h1 className="page-title">{t.dashboard}</h1>
-              <p className="page-subtitle">סקירה מרכזית של המעבדה – פרויקטים, ניסויים ופעילות.</p>
-              <div className="dashboard-summary-row">
-                <div className="dashboard-summary-card">
-                  <span className="dashboard-summary-value">{projects.length}</span>
-                  <span className="dashboard-summary-label">{t.projects}</span>
+              <h1 className="page-title">{t.dashboardMainTitle}</h1>
+              <p className="page-subtitle">{t.dashboardSubtitle}</p>
+
+              <section className="dashboard-section" aria-labelledby="dashboard-lab-stats">
+                <h2 id="dashboard-lab-stats" className="dashboard-section-title">{t.labStatsTitle}</h2>
+                <div className="dashboard-summary-row">
+                  <div className="dashboard-summary-card">
+                    <span className="dashboard-summary-value">{projects.length}</span>
+                    <span className="dashboard-summary-label">{t.projects}</span>
+                  </div>
+                  <div className="dashboard-summary-card">
+                    <span className="dashboard-summary-value">{totalTasks}</span>
+                    <span className="dashboard-summary-label">{t.tasksCount}</span>
+                  </div>
+                  <div className="dashboard-summary-card">
+                    <span className="dashboard-summary-value">{totalExperiments}</span>
+                    <span className="dashboard-summary-label">{t.navExperiments}</span>
+                  </div>
+                  <div className="dashboard-summary-card">
+                    <span className="dashboard-summary-value">{totalMaterials}</span>
+                    <span className="dashboard-summary-label">{t.navMaterials}</span>
+                  </div>
+                  <div className="dashboard-summary-card">
+                    <span className="dashboard-summary-value">{totalFiles}</span>
+                    <span className="dashboard-summary-label">{t.navDocuments}</span>
+                  </div>
                 </div>
-                <div className="dashboard-summary-card">
-                  <span className="dashboard-summary-value">{totalTasks}</span>
-                  <span className="dashboard-summary-label">{t.tasksCount}</span>
-                </div>
-                <div className="dashboard-summary-card">
-                  <span className="dashboard-summary-value">{totalFiles}</span>
-                  <span className="dashboard-summary-label">{t.filesCount}</span>
+              </section>
+
+              <div className="dashboard-quick-actions">
+                <h2 className="dashboard-section-title">{t.quickActions}</h2>
+                <div className="dashboard-quick-actions-row">
+                  <button type="button" className="secondary" onClick={() => setShowNew(true)}>{t.quickActionNewProject}</button>
+                  {recentProjects[0] && (
+                    <>
+                      <button type="button" className="secondary" onClick={() => onProjectClick(recentProjects[0])}>{t.quickActionProjects}</button>
+                      <button type="button" className="secondary" onClick={() => navigate(`/project/${recentProjects[0].id}/section/lab`)}>{t.quickActionExperiments}</button>
+                      <button type="button" className="secondary" onClick={() => navigate(`/project/${recentProjects[0].id}/section/rag`)}>{t.quickActionDocuments}</button>
+                    </>
+                  )}
                 </div>
               </div>
-              {recentProjects.length > 0 && (
-                <div className="dashboard-recent-card card">
-                  <h3>{t.recentActivity}</h3>
-                  <ul className="dashboard-recent-list">
-                    {recentProjects.map(p => (
-                      <li key={p.id}><button type="button" className="link" onClick={() => onProjectClick(p)}>{p.name}</button></li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+
+              <div className="dashboard-recent-grid">
+                {recentExperimentsList.length > 0 && (
+                  <div className="dashboard-recent-card card">
+                    <h3>{t.recentExperiments}</h3>
+                    <ul className="dashboard-recent-list">
+                      {recentExperimentsList.map((e, i) => (
+                        <li key={e.id || e.experiment_id || i}>
+                          <button type="button" className="link" onClick={() => navigate(`/project/${e.projectId}/section/lab`)}>
+                            {(e.experiment_id || e.formula || t.navExperiments).toString().slice(0, 40)} — {e.projectName || ''}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {recentDocumentsList.length > 0 && (
+                  <div className="dashboard-recent-card card">
+                    <h3>{t.recentDocuments}</h3>
+                    <ul className="dashboard-recent-list">
+                      {recentDocumentsList.map((f, i) => (
+                        <li key={f.id || i}>
+                          <button type="button" className="link" onClick={() => navigate(`/project/${f.projectId}/section/rag`)}>
+                            {(f.original_name || f.filename || '').slice(0, 35)}{(f.original_name || f.filename || '').length > 35 ? '…' : ''} — {f.projectName || ''}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {recentProjects.length > 0 && (
+                  <div className="dashboard-recent-card card">
+                    <h3>{t.recentActivity}</h3>
+                    <ul className="dashboard-recent-list">
+                      {recentProjects.map(p => (
+                        <li key={p.id}><button type="button" className="link" onClick={() => onProjectClick(p)}>{p.name}</button></li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </>
           )}
           {!dashboardMode && (

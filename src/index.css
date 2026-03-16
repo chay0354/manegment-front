@@ -367,6 +367,13 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
 }
 .dashboard-recent-list button.link:hover { text-decoration: underline; }
 
+.dashboard-section { margin-bottom: 28px; }
+.dashboard-section-title { margin: 0 0 12px 0; font-size: 1.1rem; font-weight: 600; color: var(--text); }
+.dashboard-quick-actions { margin-bottom: 28px; }
+.dashboard-quick-actions-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.dashboard-quick-actions-row .secondary { margin: 0; }
+.dashboard-recent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+
 /* ---------- Tabs (pill style under toolbar) ---------- */
 .tabs {
   display: flex;
