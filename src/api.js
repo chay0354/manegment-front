@@ -359,6 +359,7 @@ const RAG_RUN_TIMEOUT = 120000; // 2 min – research loop runs 4 agents
 
 export const rag = {
   health: () => api.get('/api/rag/health').then(r => r.data),
+  files: () => api.get('/api/rag/files').then(r => r.data?.files || []),
   search: (body) => api.post('/api/rag/search', body).then(r => r.data),
   researchRun: (body) => api.post('/api/rag/research/run', body, { timeout: RAG_RUN_TIMEOUT }).then(r => r.data),
   researchSession: () => api.post('/api/rag/research/session', {}, { timeout: 15000 }).then(r => r.data)

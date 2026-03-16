@@ -1315,13 +1315,16 @@ function RagTab({ projectId }) {
       const files = d.files || [];
       const filtered = files.filter(f => f.project_id == null || f.project_id === projectId);
       setProjectFiles(filtered);
-      const byFolder = {};
+      const folderKeys = new Set();
       for (const f of filtered) {
-        const key = f.folder_display_name != null && f.folder_display_name !== '' ? f.folder_display_name : '\0';
-        if (!byFolder[key]) byFolder[key] = [];
-        byFolder[key].push(f);
+        const path = f.folder_display_name != null && f.folder_display_name !== '' ? String(f.folder_display_name).trim() : '';
+        if (path) {
+          path.split(/[/\\>]+/).forEach((_, i, parts) => folderKeys.add(parts.slice(0, i + 1).join('/')));
+        } else {
+          folderKeys.add('\0');
+        }
       }
-      setProjectFileFoldersCollapsed(new Set(Object.keys(byFolder)));
+      setProjectFileFoldersCollapsed(new Set(folderKeys));
       setFilesLoading(false);
     }).catch(() => setFilesLoading(false));
   };
@@ -1966,49 +1969,76 @@ function RagTab({ projectId }) {
         {filesLoading && <p className="loading">{t.loading}</p>}
         {!filesLoading && projectFiles.length === 0 && <p className="muted">{t.noFilesYet}</p>}
         {!filesLoading && projectFiles.length > 0 && (() => {
-          const byFolder = {};
-          for (const f of projectFiles) {
-            const key = f.folder_display_name != null && f.folder_display_name !== '' ? f.folder_display_name : '\0';
-            if (!byFolder[key]) byFolder[key] = [];
-            byFolder[key].push(f);
+          const FOLDER_SEP = /[/\\>]+/;
+          function buildTree(files) {
+            const root = { type: 'folder', pathFull: '', children: [], files: [] };
+            for (const f of files) {
+              const pathStr = f.folder_display_name != null && f.folder_display_name !== '' ? String(f.folder_display_name).trim() : '';
+              const segments = pathStr ? pathStr.split(FOLDER_SEP).map(s => s.trim()).filter(Boolean) : [];
+              let node = root;
+              for (let i = 0; i < segments.length; i++) {
+                const pathFull = segments.slice(0, i + 1).join('/');
+                let child = node.children.find(c => c.type === 'folder' && c.pathFull === pathFull);
+                if (!child) {
+                  child = { type: 'folder', pathSegment: segments[i], pathFull, children: [], files: [] };
+                  node.children.push(child);
+                }
+                node = child;
+              }
+              node.files.push(f);
+            }
+            if (root.files.length > 0) {
+              root.children.push({ type: 'folder', pathSegment: t.noFolder, pathFull: '\0', children: [], files: root.files });
+              root.files = [];
+            }
+            root.children.sort((a, b) => (a.pathFull === '\0' ? 1 : b.pathFull === '\0' ? -1 : (a.pathSegment || '').localeCompare(b.pathSegment || '')));
+            function sortNode(n) {
+              n.children.sort((a, b) => (a.pathFull === '\0' ? 1 : b.pathFull === '\0' ? -1 : (a.pathSegment || '').localeCompare(b.pathSegment || '')));
+              n.children.forEach(sortNode);
+            }
+            sortNode(root);
+            return root;
           }
-          const folderKeys = Object.keys(byFolder).sort((a, b) => (a === '\0' ? 1 : b === '\0' ? -1 : a.localeCompare(b)));
-          const toggleProjectFolder = (key) => {
+          const tree = buildTree(projectFiles);
+          const toggleProjectFolder = (pathFull) => {
             setProjectFileFoldersCollapsed(prev => {
               const next = new Set(prev);
-              if (next.has(key)) next.delete(key);
-              else next.add(key);
+              if (next.has(pathFull)) next.delete(pathFull);
+              else next.add(pathFull);
               return next;
             });
           };
-          return (
-            <div className="rag-file-list">
-              {folderKeys.map(folderKey => {
-                const label = folderKey === '\0' ? t.noFolder : folderKey;
-                const files = byFolder[folderKey];
-                const isCollapsed = projectFileFoldersCollapsed.has(folderKey);
-                return (
-                  <div key={folderKey} className={`rag-folder-group ${isCollapsed ? 'is-collapsed' : 'is-expanded'}`}>
-                    <button type="button" className="rag-folder-toggle" onClick={() => toggleProjectFolder(folderKey)} aria-expanded={!isCollapsed}>
-                      <span className="rag-folder-chevron" aria-hidden>▼</span>
-                      <span className="rag-folder-name">📁 {label}</span>
-                      <span className="rag-folder-count">{files.length}</span>
-                    </button>
-                    {!isCollapsed && (
-                      <div className="rag-folder-files">
-                        {files.map(f => (
+          function countItems(node) {
+            let n = node.files.length;
+            for (const c of node.children) n += countItems(c);
+            return n;
+          }
+          function renderFolderNode(node, depth = 0) {
+            const isRoot = node.pathFull === '';
+            const isCollapsed = !isRoot && projectFileFoldersCollapsed.has(node.pathFull);
+            const label = isRoot ? null : node.pathSegment;
+            const count = countItems(node);
+            const hasNested = node.children.length > 0 || node.files.length > 0;
+            return (
+              <div key={node.pathFull || 'root'} className="rag-folder-group" style={isRoot ? {} : { marginLeft: Math.min(depth * 16, 80) }}>
+                {!isRoot && (
+                  <button type="button" className="rag-folder-toggle" onClick={() => toggleProjectFolder(node.pathFull)} aria-expanded={!isCollapsed}>
+                    <span className="rag-folder-chevron" aria-hidden style={{ transform: isCollapsed ? 'rotate(-90deg)' : undefined }}>▼</span>
+                    <span className="rag-folder-name">📁 {label}</span>
+                    <span className="rag-folder-count">{count}</span>
+                  </button>
+                )}
+                {(!isRoot ? !isCollapsed : true) && (
+                  <div className="rag-folder-files">
+                    {node.files.map(f => (
                       <div key={f.id} className="list-item">
                         <div>
                           <span>{f.original_name}</span>
                           {f.ingest_error && (
-                            <div className="rag-file-index-error" role="alert">
-                              {f.ingest_error}
-                            </div>
+                            <div className="rag-file-index-error" role="alert">{f.ingest_error}</div>
                           )}
                           {!f.ingest_error && !isIndexableFileName(f.original_name) && (
-                            <div className="rag-file-index-error" role="alert">
-                              {t.fileCannotBeIndexed}
-                            </div>
+                            <div className="rag-file-index-error" role="alert">{t.fileCannotBeIndexed}</div>
                           )}
                         </div>
                         <div className="flex gap">
@@ -2016,12 +2046,16 @@ function RagTab({ projectId }) {
                           <button type="button" className={`secondary ${removingFileId === f.id ? 'btn-loading' : ''}`} onClick={() => removeFile(f.id)} disabled={removingFileId === f.id}>{removingFileId === f.id ? t.loading : t.remove}</button>
                         </div>
                       </div>
-                        ))}
-                      </div>
-                    )}
+                    ))}
+                    {node.children.map(c => renderFolderNode(c, depth + 1))}
                   </div>
-                );
-              })}
+                )}
+              </div>
+            );
+          }
+          return (
+            <div className="rag-file-list">
+              {renderFolderNode(tree)}
             </div>
           );
         })()}
@@ -2035,7 +2069,9 @@ function RagTab({ projectId }) {
             <label>{t.queryOver}</label>
             <select value={selectedFilename} onChange={e => setSelectedFilename(e.target.value)}>
               <option value="">{t.allFiles}</option>
-              {projectFiles.map(f => <option key={f.id} value={f.original_name}>{f.original_name}</option>)}
+              {projectFiles.map(f => (
+                <option key={f.id} value={f.original_name}>{f.original_name}</option>
+              ))}
             </select>
           </div>
         )}
