@@ -1532,6 +1532,22 @@ function RagTab({ projectId }) {
     });
   };
 
+  /** When "all files" is selected, if the query mentions one specific project file by name, restrict search to that file for a better answer. */
+  const filenameFromQuery = (function () {
+    const q = (query || '').trim();
+    if (!q || selectedFilename) return null;
+    const mentioned = projectFiles.filter(f => {
+      const name = (f.original_name || '').trim();
+      if (!name) return false;
+      if (q.includes(name)) return true;
+      const nameNoExt = name.replace(/\.[^.]+$/, '');
+      return nameNoExt.length > 2 && q.includes(nameNoExt);
+    });
+    if (mentioned.length === 0) return null;
+    if (mentioned.length === 1) return mentioned[0].original_name;
+    return mentioned.reduce((a, b) => (a.original_name.length >= b.original_name.length ? a : b)).original_name;
+  })();
+
   const runSearch = () => {
     if (!query.trim()) return;
     setLoading(true);
@@ -1543,6 +1559,8 @@ function RagTab({ projectId }) {
         body.session_id = session.session_id;
         if (selectedFilename) {
           body.filename = selectedFilename;
+        } else if (filenameFromQuery) {
+          body.filename = filenameFromQuery;
         } else if (projectFiles.length > 0) {
           body.filenames = projectFiles.map(f => f.original_name);
         }
@@ -1906,6 +1924,11 @@ function RagTab({ projectId }) {
                         setShowSharepointUploadModal(false);
                         setSharepointUploadFiles([]);
                         setSharepointUploadFolderName('');
+                        if (res.uploaded_paths?.length) {
+                          projectFilesApi.registerAndIngest(projectId, res.uploaded_paths).then(loadFiles).catch(loadFiles);
+                        } else {
+                          loadFiles();
+                        }
                         if (showSharepointPicker) {
                           setSharepointBucketLoading(true);
                           projectFilesApi.listSharepointBucket(projectId).then(d => {

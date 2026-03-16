@@ -174,6 +174,9 @@ export const projectFiles = {
   listSharepointBucket: (projectId) => api.get(`/api/projects/${projectId}/files/sharepoint-bucket`, { params: { _: Date.now() }, timeout: 60000 }).then(r => r.data),
   addFromBucket: (projectId, path, displayName, folderDisplayName) =>
     api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName, folder_display_name: folderDisplayName || undefined }, { timeout: FILE_INGEST_TIMEOUT }).then(r => r.data),
+  /** Register uploaded paths (e.g. after direct-to-bucket upload) into project_files and trigger Matriya indexing so they can be asked on. */
+  registerAndIngest: (projectId, paths) =>
+    api.post(`/api/projects/${projectId}/files/register-and-ingest`, { paths }, { timeout: 120000 }).then(r => r.data),
   /** Upload one batch via backend. For chunked upload, pass folderId from previous response. */
   uploadToSharepointBucket: (projectId, files, folderPath = '', options = {}) => {
     const form = new FormData();
