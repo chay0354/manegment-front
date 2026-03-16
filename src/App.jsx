@@ -1561,8 +1561,6 @@ function RagTab({ projectId }) {
           body.filename = selectedFilename;
         } else if (filenameFromQuery) {
           body.filename = filenameFromQuery;
-        } else if (projectFiles.length > 0) {
-          body.filenames = projectFiles.map(f => f.original_name);
         }
         return ragApi.researchRun(body);
       })
