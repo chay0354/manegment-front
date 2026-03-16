@@ -2061,7 +2061,7 @@ function RagTab({ projectId }) {
         })()}
       </section>
 
-      <section className="rag-section" aria-labelledby="docs-ask-heading">
+      <section className="rag-section rag-section-ask" aria-labelledby="docs-ask-heading">
         <h4 id="docs-ask-heading" style={{ fontSize: '1rem', marginBottom: 8 }}>{t.docsAskSection}</h4>
         <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: 12 }}>{t.docsAskHint}</p>
         {projectFiles.length > 0 && (
@@ -2075,8 +2075,9 @@ function RagTab({ projectId }) {
             </select>
           </div>
         )}
-        <label>{t.askQuestion}</label>
-        <textarea value={query} onChange={e => setQuery(e.target.value)} placeholder={t.questionPlaceholder} disabled={!health?.ok} rows={4} />
+        <label htmlFor="rag-query-input">{t.askQuestion}</label>
+        <textarea id="rag-query-input" value={query} onChange={e => setQuery(e.target.value)} placeholder={t.questionPlaceholder} disabled={!health?.ok} rows={4} aria-describedby={!health?.ok ? 'rag-query-disabled-hint' : undefined} />
+        {!health?.ok && <p id="rag-query-disabled-hint" className="muted" style={{ fontSize: '0.85rem', marginTop: 4 }}>{t.matriyaNotSet}</p>}
         <button type="button" onClick={runSearch} disabled={loading || !health?.ok || projectFiles.length === 0} className={loading ? 'btn-loading' : ''}>{loading ? t.loading : t.run}</button>
         {result && (
           <>
