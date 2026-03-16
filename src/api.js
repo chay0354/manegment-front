@@ -39,7 +39,10 @@ export function clearAuth() {
 export function getNetworkErrorMessage(err) {
   if (!err) return 'שגיאה לא ידועה';
   const serverMsg = err.response?.data?.error;
-  if (serverMsg && typeof serverMsg === 'string') return serverMsg;
+  if (serverMsg && typeof serverMsg === 'string') {
+    if (serverMsg === 'Too many uploads') return 'יותר מדי העלאות ברגע זה. המתן דקה ונסה שוב או העלה פחות קבצים.';
+    return serverMsg;
+  }
   const status = err.response?.status;
   const msg = err.message || '';
   const code = err.code || '';
@@ -139,10 +142,11 @@ const FILE_INGEST_TIMEOUT = 180000; // 3 min – ingest (chunking + embeddings) 
 
 export const projectFiles = {
   list: (projectId) => api.get(`/api/projects/${projectId}/files`, { timeout: 60000 }).then(r => r.data),
-  upload: (projectId, file) => {
+  upload: (projectId, file, folderDisplayName) => {
     const form = new FormData();
     form.append('file', file);
     form.append('originalName', file.name || '');
+    if (folderDisplayName) form.append('folder_display_name', folderDisplayName);
     const headers = {};
     const token = getStoredToken();
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -168,7 +172,8 @@ export const projectFiles = {
     URL.revokeObjectURL(url);
   },
   listSharepointBucket: (projectId) => api.get(`/api/projects/${projectId}/files/sharepoint-bucket`, { params: { _: Date.now() }, timeout: 60000 }).then(r => r.data),
-  addFromBucket: (projectId, path, displayName) => api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName }, { timeout: FILE_INGEST_TIMEOUT }).then(r => r.data),
+  addFromBucket: (projectId, path, displayName, folderDisplayName) =>
+    api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName, folder_display_name: folderDisplayName || undefined }, { timeout: FILE_INGEST_TIMEOUT }).then(r => r.data),
   /** Upload one batch via backend. For chunked upload, pass folderId from previous response. */
   uploadToSharepointBucket: (projectId, files, folderPath = '', options = {}) => {
     const form = new FormData();
@@ -325,7 +330,18 @@ export const lab = {
     formulationIntelligence: (projectId, body) => api.post(`/api/projects/${projectId}/analysis/formulation-intelligence`, body).then(r => r.data),
     similarExperiments: (projectId, experimentId) => api.get(`/api/projects/${projectId}/analysis/similar-experiments`, { params: { experiment_id: experimentId } }).then(r => r.data)
   },
-  guard: (projectId, body) => api.post(`/api/projects/${projectId}/guard/check`, body).then(r => r.data)
+  guard: (projectId, body) => api.post(`/api/projects/${projectId}/guard/check`, body).then(r => r.data),
+  aiInsight: (projectId, body) => api.post(`/api/projects/${projectId}/lab/ai-insight`, body, { timeout: 60000 }).then(r => r.data),
+  parseExperimentFile: (projectId, file) => {
+    const form = new FormData();
+    form.append('file', file, file.name || 'file');
+    return api.post(`/api/projects/${projectId}/lab/parse-experiment-file`, form, { timeout: 60000 }).then(r => r.data);
+  },
+  savedExperiments: {
+    list: (projectId) => api.get(`/api/projects/${projectId}/lab/saved-experiments`).then(r => r.data),
+    save: (projectId, body) => api.post(`/api/projects/${projectId}/lab/saved-experiments`, body).then(r => r.data),
+    delete: (projectId, id) => api.delete(`/api/projects/${projectId}/lab/saved-experiments/${id}`).then(r => r.data)
+  }
 };
 
 export const runs = {

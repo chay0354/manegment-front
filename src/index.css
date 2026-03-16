@@ -550,7 +550,87 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
 .rag-tab .rag-section:last-of-type { flex: 1; display: flex; flex-direction: column; min-height: 200px; }
 .rag-tab textarea { min-height: 120px; margin-bottom: 12px; flex: 1; resize: vertical; }
 .rag-result { white-space: pre-wrap; padding: 16px; background: var(--bg); border-radius: var(--radius-sm); margin-top: 12px; flex: 1; overflow: auto; min-height: 100px; }
-.rag-file-list { max-height: 200px; overflow: auto; margin-bottom: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.rag-result-markdown { white-space: normal; }
+.rag-result-markdown strong { font-weight: 700; }
+.rag-result-markdown p { margin: 0 0 0.75em 0; }
+.rag-result-markdown p:last-child { margin-bottom: 0; }
+.rag-result-markdown ul, .rag-result-markdown ol { margin: 0.5em 0; padding-right: 1.5em; padding-left: 0; }
+.rag-result-markdown li { margin-bottom: 0.25em; }
+.rag-result-markdown h1, .rag-result-markdown h2, .rag-result-markdown h3 { margin: 1em 0 0.5em 0; font-size: 1rem; }
+.rag-result-markdown h1:first-child, .rag-result-markdown h2:first-child, .rag-result-markdown h3:first-child { margin-top: 0; }
+.rag-file-list { max-height: 320px; overflow: auto; margin-bottom: 16px; }
+.rag-file-index-error { font-size: 0.85rem; color: var(--muted); margin-top: 4px; }
+
+/* Project files: folder groups */
+.rag-folder-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 10px;
+  background: var(--surface);
+}
+.rag-folder-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+  text-align: right;
+  direction: rtl;
+  transition: background 0.15s, color 0.15s;
+}
+.rag-folder-toggle:hover {
+  background: var(--border);
+  color: var(--accent);
+}
+.rag-folder-toggle .rag-folder-chevron {
+  width: 20px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+  transition: transform 0.2s;
+}
+.rag-folder-group.is-expanded .rag-folder-chevron { transform: rotate(0deg); }
+.rag-folder-group.is-collapsed .rag-folder-chevron { transform: rotate(-90deg); }
+.rag-folder-toggle .rag-folder-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rag-folder-toggle .rag-folder-count {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--surface);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.rag-folder-files {
+  border-top: 1px solid var(--border);
+  padding: 4px 0;
+}
+.rag-folder-files .list-item {
+  margin: 0 8px 0 12px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+}
+.rag-folder-files .list-item:last-child { border-bottom: none; }
+.rag-folder-files .list-item:hover { background: var(--bg); }
+
+.rag-upload-progress { min-width: 0; }
+.rag-upload-progress .progress-bar { min-width: 80px; }
+
+.rag-upload-choice-modal { max-width: 320px; padding: 20px; }
+.rag-upload-choice-modal h4 { text-align: right; }
+.rag-upload-choice-modal .flex { flex-wrap: wrap; justify-content: center; }
 
 .progress-bar { height: 10px; background: var(--border); border-radius: 6px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--accent); border-radius: 6px; transition: width 0.2s; }
@@ -678,6 +758,25 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
   overflow: auto;
   padding: 24px;
 }
+/* RAG tab in fullscreen: fill the body so the card uses full space */
+.fullscreen-body:has(.rag-tab) {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.fullscreen-body .card.rag-tab.tab-card {
+  max-width: none;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border-radius: 0;
+  border-width: 0;
+}
+.fullscreen-body .rag-tab .rag-file-list { max-height: none; flex: 1; overflow: auto; }
 
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
 .modal-overlay .modal { max-width: 440px; margin: 0; box-shadow: 0 8px 32px rgba(0,0,0,0.12); }

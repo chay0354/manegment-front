@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
 import { BrowserRouter, Routes, Route, Link, NavLink, Outlet, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, chat as chatApi, lab as labApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth, getNetworkErrorMessage } from './api';
 import t from './strings';
@@ -884,6 +885,8 @@ function NotesTab({ projectId }) {
   );
 }
 
+const LAB_AI_SECTION_IDS = ['insights', 'contradictions', 'failure-patterns', 'snapshot', 'formula-validate', 'formulation-intelligence', 'similar-experiments', 'relations', 'guard', 'experiments', 'suggestion-engine'];
+
 function LabTab({ projectId }) {
   const [experiments, setExperiments] = React.useState([]);
   const [sessions, setSessions] = React.useState([]);
@@ -904,6 +907,15 @@ function LabTab({ projectId }) {
   const [similarExperimentId, setSimilarExperimentId] = React.useState('');
   const [similarResult, setSimilarResult] = React.useState(null);
   const [activeSection, setActiveSection] = React.useState('insights');
+  const [experimentContext, setExperimentContext] = React.useState('');
+  const [aiResultBySection, setAiResultBySection] = React.useState({});
+  const [aiLoadingSection, setAiLoadingSection] = React.useState(null);
+  const [savedExperiments, setSavedExperiments] = React.useState([]);
+  const [savedExperimentName, setSavedExperimentName] = React.useState('');
+  const [showSaveExperimentModal, setShowSaveExperimentModal] = React.useState(false);
+  const [savingExperiment, setSavingExperiment] = React.useState(false);
+  const [deletingSavedId, setDeletingSavedId] = React.useState(null);
+  const labFileInputRef = React.useRef(null);
 
   const load = () => {
     setLoading(true);
@@ -921,6 +933,35 @@ function LabTab({ projectId }) {
   };
   React.useEffect(() => { if (projectId) load(); }, [projectId]);
   React.useEffect(() => { if (projectId && activeSection === 'insights' && !insights) loadInsights(); }, [projectId, activeSection]);
+
+  const loadSavedExperiments = () => {
+    if (!projectId) return;
+    labApi.savedExperiments.list(projectId).then(d => setSavedExperiments(d.saved || [])).catch(() => setSavedExperiments([]));
+  };
+  React.useEffect(() => { if (projectId) loadSavedExperiments(); }, [projectId]);
+
+  const saveExperiment = () => {
+    const name = savedExperimentName.trim();
+    if (!name) { setError(t.labSavedExperimentNameRequired); return; }
+    if (!experimentContext.trim()) { setError(t.labSavedExperimentContentRequired); return; }
+    setSavingExperiment(true);
+    setError(null);
+    labApi.savedExperiments.save(projectId, { name, content: experimentContext })
+      .then(() => { setSavedExperimentName(''); setShowSaveExperimentModal(false); loadSavedExperiments(); setError(null); })
+      .catch(err => setError(err.response?.data?.error || err.message))
+      .finally(() => setSavingExperiment(false));
+  };
+
+  const loadSavedExperiment = (item) => {
+    setExperimentContext(item.content || '');
+    setError(null);
+  };
+
+  const deleteSavedExperiment = (id) => {
+    if (!window.confirm(t.labSavedExperimentDeleteConfirm)) return;
+    setDeletingSavedId(id);
+    labApi.savedExperiments.delete(projectId, id).then(loadSavedExperiments).catch(err => setError(err.response?.data?.error || err.message)).finally(() => setDeletingSavedId(null));
+  };
 
   const loadContradictions = () => labApi.analysis.contradictions(projectId).then(d => setContradictions(d)).catch(() => setContradictions({ contradictions: [] }));
   const loadFailurePatterns = () => labApi.analysis.failurePatterns(projectId).then(d => setFailurePatterns(d)).catch(() => setFailurePatterns(null));
@@ -955,6 +996,36 @@ function LabTab({ projectId }) {
     labApi.analysis.similarExperiments(projectId, similarExperimentId.trim()).then(d => setSimilarResult(d)).catch(err => setSimilarResult({ error: err.response?.data?.error || err.message }));
   };
 
+  const handleLabFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const name = (file.name || '').toLowerCase();
+    if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      setError(null);
+      labApi.parseExperimentFile(projectId, file)
+        .then((d) => { setExperimentContext(d.text ?? ''); })
+        .catch((err) => setError(err.response?.data?.error || err.message));
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => { setExperimentContext(String(reader.result ?? '')); setError(null); };
+      reader.onerror = () => setError('שגיאה בקריאת הקובץ');
+      reader.readAsText(file, 'utf-8');
+    }
+    e.target.value = '';
+  };
+
+  const fetchAiInsight = (sectionId) => {
+    if (!experimentContext.trim()) { setError(t.labAiNeedContext); return; }
+    setAiLoadingSection(sectionId);
+    setError(null);
+    labApi.aiInsight(projectId, { experimentContext: experimentContext.trim(), insightType: sectionId })
+      .then((d) => {
+        setAiResultBySection(prev => ({ ...prev, [sectionId]: d.text }));
+      })
+      .catch((err) => setError(err.response?.data?.error || err.message))
+      .finally(() => setAiLoadingSection(null));
+  };
+
   const sections = [
     { id: 'insights', label: t.labInsights },
     { id: 'contradictions', label: t.labContradictions },
@@ -965,7 +1036,8 @@ function LabTab({ projectId }) {
     { id: 'similar-experiments', label: t.labSimilarExperiments },
     { id: 'relations', label: t.labRelations },
     { id: 'guard', label: t.labResearchGuard },
-    { id: 'experiments', label: t.labExperimentsList }
+    { id: 'experiments', label: t.labExperimentsList },
+    { id: 'suggestion-engine', label: t.labSuggestionEngine }
   ];
 
   if (loading && experiments.length === 0) return <div className="card tab-card"><p className="loading">{t.loading}</p></div>;
@@ -974,13 +1046,106 @@ function LabTab({ projectId }) {
   return (
     <div className="card tab-card">
       <h3 style={{ marginBottom: 16 }}>{t.labTab}</h3>
-      <div className="flex gap" style={{ flexWrap: 'wrap', marginBottom: 16 }}>
-        {sections.map(s => (
-          <button key={s.id} type="button" className={activeSection === s.id ? 'active' : 'secondary'} onClick={() => { setActiveSection(s.id); if (s.id === 'contradictions' && !contradictions) loadContradictions(); if (s.id === 'failure-patterns' && !failurePatterns) loadFailurePatterns(); if (s.id === 'snapshot' && !snapshot) loadSnapshot(); if (s.id === 'relations' && !relations) loadRelations(); if (s.id === 'insights') loadInsights(); }}>{s.label}</button>
-        ))}
+
+      <section className="rag-section" style={{ marginBottom: 20 }}>
+        <p className="muted" style={{ marginBottom: 8, fontSize: '0.9rem' }}>{t.labExperimentInputHint}</p>
+        <div className="flex gap" style={{ flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+          <input
+            ref={labFileInputRef}
+            type="file"
+            accept=".txt,.csv,.json,.xlsx,.xls"
+            onChange={handleLabFileChange}
+            className="rag-file-input-hidden"
+            id="lab-experiment-file"
+            aria-label={t.labUploadExperimentFile}
+          />
+          <label htmlFor="lab-experiment-file" className="rag-file-button" style={{ cursor: 'pointer' }}>{t.labUploadExperimentFile}</label>
+        </div>
+        <textarea
+          className="form-control"
+          dir="auto"
+          rows={4}
+          placeholder={t.labExperimentInputPlaceholder}
+          value={experimentContext}
+          onChange={e => { setExperimentContext(e.target.value); setError(null); }}
+          style={{ width: '100%', marginBottom: 8 }}
+        />
+        <div className="flex gap" style={{ flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <button type="button" className="rag-file-button" disabled={!experimentContext.trim()} onClick={() => setShowSaveExperimentModal(true)}>
+            {t.labSaveExperiment}
+          </button>
+        </div>
+        {showSaveExperimentModal && (
+          <div className="modal-overlay" onClick={() => !savingExperiment && setShowSaveExperimentModal(false)} role="dialog" aria-modal="true" aria-label={t.labSaveExperiment}>
+            <div className="modal card" onClick={e => e.stopPropagation()} style={{ maxWidth: 360 }}>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>{t.labSaveExperiment}</h4>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9rem' }}>{t.labSavedExperimentNamePlaceholder}</label>
+              <input
+                type="text"
+                className="form-control"
+                placeholder={t.labSavedExperimentNamePlaceholder}
+                value={savedExperimentName}
+                onChange={e => setSavedExperimentName(e.target.value)}
+                style={{ width: '100%', marginBottom: 12 }}
+                aria-label={t.labSavedExperimentNamePlaceholder}
+                autoFocus
+              />
+              <div className="flex gap">
+                <button type="button" className="secondary" onClick={() => setShowSaveExperimentModal(false)} disabled={savingExperiment}>{t.cancel}</button>
+                <button type="button" className="rag-file-button" disabled={savingExperiment || !savedExperimentName.trim()} onClick={saveExperiment}>
+                  {savingExperiment ? t.loading : t.save}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <div className="form-group" style={{ marginBottom: 16, maxWidth: 360 }}>
+        <label htmlFor="lab-section-select" style={{ display: 'block', marginBottom: 6, fontSize: '0.9rem', fontWeight: 500 }}>{t.labAnalysisType}</label>
+        <select
+          id="lab-section-select"
+          className="form-control"
+          value={activeSection}
+          onChange={(e) => {
+            const sectionId = e.target.value;
+            setActiveSection(sectionId);
+            if (experimentContext.trim() && LAB_AI_SECTION_IDS.includes(sectionId) && !aiResultBySection[sectionId] && aiLoadingSection !== sectionId) fetchAiInsight(sectionId);
+            if (!experimentContext.trim()) {
+              if (sectionId === 'contradictions' && !contradictions) loadContradictions();
+              if (sectionId === 'failure-patterns' && !failurePatterns) loadFailurePatterns();
+              if (sectionId === 'snapshot' && !snapshot) loadSnapshot();
+              if (sectionId === 'relations' && !relations) loadRelations();
+              if (sectionId === 'insights') loadInsights();
+            }
+          }}
+          style={{ width: '100%', padding: '10px 12px', fontSize: '1rem' }}
+          aria-label={t.labAnalysisType}
+        >
+          {sections.map(s => (
+            <option key={s.id} value={s.id}>{s.label}</option>
+          ))}
+        </select>
       </div>
 
-      {activeSection === 'insights' && (
+      {experimentContext.trim() && LAB_AI_SECTION_IDS.includes(activeSection) && (
+        <section className="rag-section">
+          {aiLoadingSection === activeSection && <p className="loading">{t.labAiThinking}</p>}
+          {!aiLoadingSection && aiResultBySection[activeSection] && (
+            <>
+              <div className="rag-result rag-result-markdown" style={{ marginBottom: 12 }}>
+                <ReactMarkdown>{aiResultBySection[activeSection]}</ReactMarkdown>
+              </div>
+              <button type="button" className="secondary" onClick={() => fetchAiInsight(activeSection)}>{t.refresh}</button>
+            </>
+          )}
+          {!aiLoadingSection && !aiResultBySection[activeSection] && (
+            <button type="button" className="rag-file-button" onClick={() => fetchAiInsight(activeSection)}>{t.labGetAiInsight}</button>
+          )}
+        </section>
+      )}
+
+      {activeSection === 'insights' && !experimentContext.trim() && (
         <section className="rag-section">
           {insights ? (
             <div>
@@ -992,28 +1157,28 @@ function LabTab({ projectId }) {
         </section>
       )}
 
-      {activeSection === 'contradictions' && (
+      {activeSection === 'contradictions' && !experimentContext.trim() && (
         <section className="rag-section">
           {contradictions && <div><p>{contradictions.contradictions?.length ? t.labContradictionsFound(contradictions.contradictions.length) : t.labNoContradictions}</p>{contradictions.contradictions?.map((c, i) => <div key={i} className="card" style={{ marginTop: 8, padding: 12 }}><strong>{t.labSameFormulaDifferentOutcomes}</strong><ul style={{ margin: 0, paddingRight: 20 }}>{c.experiments?.map((e, j) => <li key={j}>{e.experiment_id}: {e.experiment_outcome}</li>)}</ul></div>)}</div>}
           <button type="button" className="secondary" onClick={loadContradictions}>{contradictions ? t.refresh : t.load}</button>
         </section>
       )}
 
-      {activeSection === 'failure-patterns' && (
+      {activeSection === 'failure-patterns' && !experimentContext.trim() && (
         <section className="rag-section">
           {failurePatterns && <div><p>{t.labFailureCount(failurePatterns.failure_count)}</p><p>{t.labByDomain}</p><ul style={{ margin: 0, paddingRight: 20 }}>{(failurePatterns.by_domain || []).map(([name, count], i) => <li key={i}>{name}: {count}</li>)}</ul><p style={{ marginTop: 8 }}>{t.labByMaterial}</p><ul style={{ margin: 0, paddingRight: 20 }}>{(failurePatterns.by_material || []).slice(0, 15).map(([name, count], i) => <li key={i}>{name}: {count}</li>)}</ul></div>}
           <button type="button" className="secondary" onClick={loadFailurePatterns}>{failurePatterns ? t.refresh : t.load}</button>
         </section>
       )}
 
-      {activeSection === 'snapshot' && (
+      {activeSection === 'snapshot' && !experimentContext.trim() && (
         <section className="rag-section">
           {snapshot && <div><p>{t.labSnapshotTotal(snapshot.total)}</p><p>success: {snapshot.outcomes?.success ?? 0}, failure: {snapshot.outcomes?.failure ?? 0}, partial: {snapshot.outcomes?.partial ?? 0}, production: {snapshot.outcomes?.production_formula ?? 0}</p>{(snapshot.by_domain?.length > 0) && <ul style={{ margin: 0, paddingRight: 20 }}>{snapshot.by_domain.map(([d, n], i) => <li key={i}>{d}: {n}</li>)}</ul>}</div>}
           <button type="button" className="secondary" onClick={loadSnapshot}>{snapshot ? t.refresh : t.load}</button>
         </section>
       )}
 
-      {activeSection === 'formula-validate' && (
+      {activeSection === 'formula-validate' && !experimentContext.trim() && (
         <section className="rag-section">
           <label>{t.labFormulaValidator}</label>
           <textarea className="form-control" dir="ltr" rows={3} placeholder={t.labFormulaPlaceholder} value={formulaValidateInput} onChange={e => setFormulaValidateInput(e.target.value)} />
@@ -1022,7 +1187,7 @@ function LabTab({ projectId }) {
         </section>
       )}
 
-      {activeSection === 'formulation-intelligence' && (
+      {activeSection === 'formulation-intelligence' && !experimentContext.trim() && (
         <section className="rag-section">
           <label>{t.labFormulationIntelligence}</label>
           <p className="muted" style={{ marginBottom: 8 }}>{t.labFormulationIntelligenceHint}</p>
@@ -1032,7 +1197,7 @@ function LabTab({ projectId }) {
         </section>
       )}
 
-      {activeSection === 'similar-experiments' && (
+      {activeSection === 'similar-experiments' && !experimentContext.trim() && (
         <section className="rag-section">
           <label>{t.labSimilarExperimentsTitle}</label>
           <p className="muted" style={{ marginBottom: 8 }}>{t.labSimilarExperimentsHint}</p>
@@ -1042,14 +1207,14 @@ function LabTab({ projectId }) {
         </section>
       )}
 
-      {activeSection === 'relations' && (
+      {activeSection === 'relations' && !experimentContext.trim() && (
         <section className="rag-section">
           {relations && <div><p>{t.labRelationsSummary(relations.experiments_count, relations.material_library_count)}</p><p className="muted">{t.labRelationsList}</p><ul style={{ margin: 0, paddingRight: 20 }}>{(relations.relations || []).slice(0, 30).map((r, i) => <li key={i}>{r.type}: {r.experiment_id} {r.formula != null ? `— ${String(r.formula).slice(0, 40)}` : ''} {r.material != null ? `— ${r.material}` : ''}</li>)}</ul></div>}
           <button type="button" className="secondary" onClick={loadRelations}>{relations ? t.refresh : t.load}</button>
         </section>
       )}
 
-      {activeSection === 'guard' && (
+      {activeSection === 'guard' && !experimentContext.trim() && (
         <section className="rag-section">
           <label>{t.labResearchGuard}</label>
           <textarea className="form-control" dir="ltr" rows={2} placeholder={t.labGuardPlaceholder} value={guardInput} onChange={e => setGuardInput(e.target.value)} />
@@ -1058,7 +1223,13 @@ function LabTab({ projectId }) {
         </section>
       )}
 
-      {activeSection === 'experiments' && (
+      {activeSection === 'suggestion-engine' && !experimentContext.trim() && (
+        <section className="rag-section">
+          <p className="muted">{t.labSuggestionEngineHint}</p>
+        </section>
+      )}
+
+      {activeSection === 'experiments' && !experimentContext.trim() && (
         <section className="rag-section">
           <p>{t.labExperimentsCount(experiments.length)}</p>
           <p className="muted">{t.labSessionsCount(sessions.length)} {t.labMaterialsCount(materials.length)}</p>
@@ -1067,6 +1238,24 @@ function LabTab({ projectId }) {
           {experiments.length > 50 && <p className="muted">{t.labShowingFirst(50)}</p>}
         </section>
       )}
+
+      <section className="rag-section" style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+        <h4 style={{ fontSize: '1rem', marginBottom: 8 }}>{t.labSavedExperimentsTitle}</h4>
+        {savedExperiments.length === 0 && <p className="muted">{t.labSavedExperimentsEmpty}</p>}
+        {savedExperiments.length > 0 && (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            {savedExperiments.map((item) => (
+              <li key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <button type="button" className="secondary" style={{ flex: 1, textAlign: 'right', minWidth: 0 }} onClick={() => loadSavedExperiment(item)} title={item.content ? String(item.content).slice(0, 100) + '…' : ''}>
+                  <span style={{ fontWeight: 500 }}>{item.name}</span>
+                  <span className="muted" style={{ marginRight: 8, fontSize: '0.85rem' }}>{item.created_at ? new Date(item.created_at).toLocaleDateString('he-IL') : ''}</span>
+                </button>
+                <button type="button" className="secondary" disabled={deletingSavedId === item.id} onClick={() => deleteSavedExperiment(item.id)}>{deletingSavedId === item.id ? t.loading : t.delete}</button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
@@ -1080,6 +1269,7 @@ function RagTab({ projectId }) {
   const [projectFiles, setProjectFiles] = React.useState([]);
   const [filesLoading, setFilesLoading] = React.useState(true);
   const [uploading, setUploading] = React.useState(false);
+  const [uploadProgress, setUploadProgress] = React.useState({ current: 0, total: 0 });
   const [selectedFilename, setSelectedFilename] = React.useState('');
   const [actionMessage, setActionMessage] = React.useState(null);
   const [removingFileId, setRemovingFileId] = React.useState(null);
@@ -1090,6 +1280,9 @@ function RagTab({ projectId }) {
   const [sharepointSearchQuery, setSharepointSearchQuery] = React.useState('');
   const [sharepointExpandedFolders, setSharepointExpandedFolders] = React.useState(() => new Set());
   const [addingFromBucket, setAddingFromBucket] = React.useState(null);
+  const [addingFolderPath, setAddingFolderPath] = React.useState(null);
+  const [addingFolderProgress, setAddingFolderProgress] = React.useState({ current: 0, total: 0 });
+  const [projectFileFoldersCollapsed, setProjectFileFoldersCollapsed] = React.useState(() => new Set());
   const [showSharepointUploadModal, setShowSharepointUploadModal] = React.useState(false);
   const [sharepointUploadFiles, setSharepointUploadFiles] = React.useState([]);
   const [sharepointUploading, setSharepointUploading] = React.useState(false);
@@ -1099,8 +1292,18 @@ function RagTab({ projectId }) {
   const [sharepointUploadFolderName, setSharepointUploadFolderName] = React.useState('');
   const sharepointProgressPollRef = React.useRef(null);
   const sharepointFolderInputRef = React.useRef(null);
+  const [showUploadTypeChoice, setShowUploadTypeChoice] = React.useState(false);
+  const ragFileInputRef = React.useRef(null);
+  const ragFolderInputRef = React.useRef(null);
 
-  const loadFiles = () => projectFilesApi.list(projectId).then(d => { setProjectFiles(d.files || []); setFilesLoading(false); });
+  const loadFiles = () => {
+    if (!projectId) return;
+    projectFilesApi.list(projectId).then(d => {
+      const files = d.files || [];
+      setProjectFiles(files.filter(f => f.project_id == null || f.project_id === projectId));
+      setFilesLoading(false);
+    }).catch(() => setFilesLoading(false));
+  };
 
   React.useEffect(() => {
     ragApi.health().then(setHealth).catch(() => setHealth({ ok: false }));
@@ -1115,6 +1318,13 @@ function RagTab({ projectId }) {
       el.setAttribute('directory', '');
     }
   }, [showSharepointUploadModal]);
+  React.useEffect(() => {
+    const el = ragFolderInputRef.current;
+    if (el) {
+      el.setAttribute('webkitdirectory', '');
+      el.setAttribute('directory', '');
+    }
+  }, []);
 
   async function readDroppedFolder(entry, basePath = '') {
     const out = [];
@@ -1166,18 +1376,22 @@ function RagTab({ projectId }) {
     const fileList = e.target.files;
     if (!fileList?.length) return;
     setError(null);
-    setUploading(true);
     const files = Array.from(fileList);
+    const folderDisplayName = files[0]?.webkitRelativePath ? files[0].webkitRelativePath.split('/')[0].trim() || null : null;
+    setUploading(true);
+    setUploadProgress({ current: 0, total: files.length });
     const errors = [];
     for (let i = 0; i < files.length; i++) {
+      setUploadProgress(prev => ({ ...prev, current: i + 1 }));
       try {
-        await projectFilesApi.upload(projectId, files[i]);
+        await projectFilesApi.upload(projectId, files[i], folderDisplayName);
       } catch (err) {
         errors.push(files[i].name + ': ' + (err.response?.data?.error || err.message));
       }
     }
     e.target.value = '';
     setUploading(false);
+    setUploadProgress({ current: 0, total: 0 });
     loadFiles();
     if (errors.length) setError(errors.length === files.length ? errors.join('; ') : t.uploadSomeFailed + ' ' + errors.join('; '));
   };
@@ -1187,6 +1401,18 @@ function RagTab({ projectId }) {
     setRemovingFileId(fileId);
     projectFilesApi.delete(projectId, fileId).then(loadFiles).catch(err => setError(err.message)).finally(() => setRemovingFileId(null));
   };
+
+  const INDEXABLE_EXT = /\.(pdf|docx|doc|txt|xlsx|xls)$/i;
+  const isIndexableFileName = (name) => name && INDEXABLE_EXT.test(String(name).trim());
+
+  /** Collect all file entries { path, displayName } under a folder node (recursive). */
+  function collectFilesUnder(node, displayNamesMap = {}) {
+    if (node.type === 'file') return [{ path: node.path, displayName: node.displayName ?? displayNamesMap[node.path] ?? node.name }];
+    if (node.type === 'folder' && node.children) {
+      return node.children.flatMap(child => collectFilesUnder(child, displayNamesMap));
+    }
+    return [];
+  }
 
   /** True only when the string looks like a storage placeholder (bucket id or file_1-style), not a real filename. */
   function looksLikeStoragePlaceholder(str) {
@@ -1217,11 +1443,6 @@ function RagTab({ projectId }) {
     if (looksMojibake(d)) return friendlyHebrewLabel(path, fallbackName) || path || '';
     if (looksLikeStoragePlaceholder(d)) return friendlyHebrewLabel(path, fallbackName) || d;
     return d;
-  }
-  const RAG_ALLOWED_EXT = /\.(pdf|docx|doc|txt|xlsx|xls)$/i;
-  function isRagAllowedFile(pathOrName) {
-    const s = (pathOrName || '').trim();
-    return s && RAG_ALLOWED_EXT.test(s);
   }
   function buildBucketTree(files, displayNamesMap = {}, currentProjectId = '') {
     const root = { type: 'folder', pathPrefix: '', children: [] };
@@ -1355,16 +1576,6 @@ function RagTab({ projectId }) {
               projectFilesApi.listSharepointBucket(projectId).then(d => {
                 const files = d.files || [];
                 const displayNamesMap = d.displayNamesMap || {};
-                const mapKeys = Object.keys(displayNamesMap);
-                console.log('[SharePoint decode] list response:', { filesCount: files.length, displayNamesMapKeys: mapKeys.length, sampleMapKeys: mapKeys.slice(0, 5) });
-                const manualFiles = files.filter(f => (f.path || '').startsWith('manual/'));
-                const missingInMap = manualFiles.filter(f => displayNamesMap[f.path] == null);
-                const inMap = manualFiles.filter(f => displayNamesMap[f.path] != null);
-                console.log('[SharePoint decode] manual files: total=', manualFiles.length, '| in displayNamesMap=', inMap.length, '| MISSING from map (will show קובץ/placeholder)=', missingInMap.length, '| missing paths=', missingInMap.map(f => f.path));
-                manualFiles.slice(0, 10).forEach(f => {
-                  console.log('[SharePoint decode] file:', f.path, '| displayName from API:', JSON.stringify(f.displayName), '| in map:', f.path in displayNamesMap, '| map value:', JSON.stringify(displayNamesMap[f.path]));
-                });
-                if (manualFiles.length > 10) console.log('[SharePoint decode] ... and', manualFiles.length - 10, 'more manual files');
                 setSharepointBucketFiles(files);
                 setSharepointDisplayNamesMap(displayNamesMap);
                 setSharepointBucketLoading(false);
@@ -1380,19 +1591,61 @@ function RagTab({ projectId }) {
             {t.chooseFromSharepoint}
           </button>
           <input
+            ref={ragFileInputRef}
             id="rag-file-upload"
             type="file"
             multiple
-            accept=".pdf,.docx,.doc,.txt,.xlsx,.xls"
+            accept=".pdf,.docx,.doc,.txt,.xlsx,.xls,.pptx,.jpg,.jpeg,.png"
             onChange={onFileChange}
             className="rag-file-input-hidden"
             aria-label={t.chooseFile}
             tabIndex={-1}
           />
-          <label htmlFor="rag-file-upload" className="rag-file-button">
+          <input
+            ref={ragFolderInputRef}
+            id="rag-folder-upload"
+            type="file"
+            multiple
+            onChange={(e) => { onFileChange(e); e.target.value = ''; }}
+            className="rag-file-input-hidden"
+            aria-label={t.uploadFolderOption}
+            tabIndex={-1}
+          />
+          <button
+            type="button"
+            className="rag-file-button"
+            onClick={() => setShowUploadTypeChoice(true)}
+          >
             {t.chooseFileMultiple}
-          </label>
-          {uploading && <span className="loading">{t.uploading}</span>}
+          </button>
+          {showUploadTypeChoice && (
+            <div className="modal-overlay" onClick={() => setShowUploadTypeChoice(false)} role="dialog" aria-modal="true" aria-label={t.uploadChoiceTitle}>
+              <div className="rag-upload-choice-modal modal card" onClick={e => e.stopPropagation()}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>{t.uploadChoiceTitle}</h4>
+                <div className="flex gap" style={{ gap: 10 }}>
+                  <button type="button" className="rag-file-button" onClick={() => { setShowUploadTypeChoice(false); ragFileInputRef.current?.click(); }}>
+                    📄 {t.uploadFilesOption}
+                  </button>
+                  <button type="button" className="rag-file-button" onClick={() => { setShowUploadTypeChoice(false); ragFolderInputRef.current?.click(); }}>
+                    📁 {t.uploadFolderOption}
+                  </button>
+                </div>
+                <button type="button" className="secondary" style={{ marginTop: 12 }} onClick={() => setShowUploadTypeChoice(false)}>{t.cancel}</button>
+              </div>
+            </div>
+          )}
+          {uploading && (
+            <div className="rag-upload-progress" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="loading" style={{ margin: 0 }}>
+                {typeof t.uploadingProgress === 'function' ? t.uploadingProgress(uploadProgress.current, uploadProgress.total) : t.uploading}
+              </span>
+              {uploadProgress.total > 0 && (
+                <div className="progress-bar" style={{ width: 120, flexShrink: 0 }}>
+                  <div className="progress-fill" style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
         {showSharepointPicker && (
           <div className="modal-overlay" onClick={() => setShowSharepointPicker(false)} role="dialog" aria-modal="true" aria-label={t.sharepointBucketList}>
@@ -1423,37 +1676,33 @@ function RagTab({ projectId }) {
                   const filtered = q ? sharepointBucketFiles.filter(f => (f.displayName || f.name || f.path || '').toLowerCase().includes(q)) : sharepointBucketFiles;
                   if (filtered.length === 0) return <p className="muted">{t.noSharepointFiles}</p>;
                   const isSearch = !!q;
-                  function renderBucketNode(node, depth = 0) {
+                  function renderBucketNode(node, depth = 0, parentFolderDisplayName = null) {
                     const pathKey = node.path || node.pathPrefix || '';
                     const displayFromMap = sharepointDisplayNamesMap[pathKey];
                     const display = displayFromMap ?? node.displayName;
                     const finalDisplay = safeDisplayName(display, node.path, node.name);
-                    if (node.type === 'file' && pathKey.startsWith('manual/')) {
-                      console.log('[SharePoint decode] render file:', pathKey, '| displayFromMap:', JSON.stringify(displayFromMap), '| node.displayName:', JSON.stringify(node.displayName), '| final:', JSON.stringify(finalDisplay));
-                    }
                     if (node.type === 'file') {
-                      const ragAllowed = isRagAllowedFile(node.path || node.name);
                       return (
                         <li key={node.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)', paddingRight: depth * 16 }}>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }} title={node.path}>{finalDisplay}</span>
-                          {ragAllowed ? (
-                            <button type="button" className="secondary" disabled={addingFromBucket === node.path} onClick={() => { setAddingFromBucket(node.path); projectFilesApi.addFromBucket(projectId, node.path, safeDisplayName(display, node.path, node.name)).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
-                          ) : (
-                            <span className="muted" style={{ fontSize: '0.85rem' }}>קובץ בפורמט לא מתאים, לא ניתן לסרוק על ידי RAG</span>
-                          )}
+                          <button type="button" className="secondary" disabled={addingFromBucket === node.path || addingFolderPath} onClick={() => { setAddingFromBucket(node.path); projectFilesApi.addFromBucket(projectId, node.path, safeDisplayName(display, node.path, node.name), parentFolderDisplayName).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
                         </li>
                       );
                     }
                     const expanded = sharepointExpandedFolders.has(node.pathPrefix);
+                    const isAddingThisFolder = addingFolderPath === node.pathPrefix;
                     return (
                       <li key={node.pathPrefix || node.name} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                        <button type="button" className="secondary" style={{ width: '100%', justifyContent: 'flex-start', textAlign: 'right', marginBottom: 4, padding: '6px 8px', background: 'var(--bg)' }} onClick={() => toggleBucketFolder(node.pathPrefix)} aria-expanded={expanded}>
-                          <span style={{ marginLeft: 8 }}>{expanded ? '▼' : '▶'}</span>
-                          <span style={{ marginRight: 6 }}>{safeDisplayName(display, node.path || node.pathPrefix, node.name)}</span>
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                          <button type="button" className="secondary" style={{ flex: 1, minWidth: 0, justifyContent: 'flex-start', textAlign: 'right', padding: '6px 8px', background: 'var(--bg)' }} onClick={() => toggleBucketFolder(node.pathPrefix)} aria-expanded={expanded}>
+                            <span style={{ marginLeft: 8 }}>{expanded ? '▼' : '▶'}</span>
+                            <span style={{ marginRight: 6 }}>{finalDisplay}</span>
+                          </button>
+                          <button type="button" className="secondary" disabled={isAddingThisFolder || addingFromBucket != null} onClick={() => { (async () => { const files = collectFilesUnder(node, sharepointDisplayNamesMap); if (files.length === 0) return; setAddingFolderPath(node.pathPrefix); setAddingFolderProgress({ current: 0, total: files.length }); for (let i = 0; i < files.length; i++) { setAddingFolderProgress(prev => ({ ...prev, current: i + 1 })); try { await projectFilesApi.addFromBucket(projectId, files[i].path, files[i].displayName ?? files[i].path.split('/').pop(), finalDisplay); } catch (err) { setError(err.response?.data?.error || err.message); } } loadFiles(); setAddingFolderPath(null); setAddingFolderProgress({ current: 0, total: 0 }); })(); }}>{isAddingThisFolder && addingFolderProgress.total ? `${t.uploading} (${addingFolderProgress.current}/${addingFolderProgress.total})` : isAddingThisFolder ? t.uploading : t.addFolderToProject}</button>
+                        </div>
                         {expanded && node.children && node.children.length > 0 && (
                           <ul style={{ listStyle: 'none', padding: 0, margin: 0, borderRight: '1px solid var(--border)', marginRight: 8 }}>
-                            {node.children.map(child => renderBucketNode(child, depth + 1))}
+                            {node.children.map(child => renderBucketNode(child, depth + 1, finalDisplay))}
                           </ul>
                         )}
                       </li>
@@ -1464,15 +1713,13 @@ function RagTab({ projectId }) {
                       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                         {filtered.map(f => {
                           const fileDisplay = sharepointDisplayNamesMap[f.path] ?? f.displayName;
-                          const ragAllowed = isRagAllowedFile(f.path || f.name);
+                          const pathParts = (f.path || '').split('/').filter(Boolean);
+                          const parentPath = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : '';
+                          const folderDisplayName = parentPath ? (sharepointDisplayNamesMap[parentPath] ?? pathParts[pathParts.length - 2] ?? null) : null;
                           return (
                             <li key={f.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.path}>{safeDisplayName(fileDisplay, f.path, f.name)}</span>
-                              {ragAllowed ? (
-                                <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); projectFilesApi.addFromBucket(projectId, f.path, safeDisplayName(fileDisplay, f.path, f.name)).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
-                              ) : (
-                                <span className="muted" style={{ fontSize: '0.85rem' }}>קובץ בפורמט לא מתאים, לא ניתן לסרוק על ידי RAG</span>
-                              )}
+                              <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); projectFilesApi.addFromBucket(projectId, f.path, safeDisplayName(fileDisplay, f.path, f.name), folderDisplayName).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
                             </li>
                           );
                         })}
@@ -1633,13 +1880,6 @@ function RagTab({ projectId }) {
                     };
                     projectFilesApi.uploadToSharepointBucketDirect(projectId, filesToUpload, folderPath, progressOpts)
                       .then(res => {
-                        if (res.uploaded_paths?.length > 0 && folderPath) {
-                          const firstPath = res.uploaded_paths[0].path || '';
-                          const bucketFolderPath = firstPath.includes('/') ? firstPath.slice(0, firstPath.lastIndexOf('/')) : firstPath;
-                          console.log('[SharePoint upload] Folder in bucket:', res.bucket || 'sharepoint-files', '| Path:', bucketFolderPath, '| Display name:', folderPath);
-                          if (res.supabase_project) console.log('[SharePoint upload] Open Supabase dashboard → project', res.supabase_project, '→ Storage → bucket', (res.bucket || 'sharepoint-files'));
-                        }
-                        if (res.errors?.length) console.warn('[SharePoint upload] Errors:', res.errors);
                         setActionMessage(res.failed > 0 ? t.sharepointUploadSomeFailed : t.sharepointUploadSuccess);
                         setTimeout(() => setActionMessage(null), 3000);
                         setShowSharepointUploadModal(false);
@@ -1682,20 +1922,67 @@ function RagTab({ projectId }) {
       <section className="rag-section" aria-labelledby="docs-list-heading">
         <h4 id="docs-list-heading" style={{ fontSize: '1rem', marginBottom: 8 }}>{t.docsListSection}</h4>
         {filesLoading && <p className="loading">{t.loading}</p>}
-        {!filesLoading && projectFiles.length === 0 && <p className="loading">{t.noFilesYet}</p>}
-        {!filesLoading && projectFiles.length > 0 && (
-          <div className="rag-file-list">
-            {projectFiles.map(f => (
-              <div key={f.id} className="list-item">
-                <span>{f.original_name}</span>
-                <div className="flex gap">
-                  <button type="button" className="secondary" title={f.storage_path ? t.download : t.downloadNotAvailable} disabled={!f.storage_path} onClick={() => f.storage_path && projectFilesApi.download(projectId, f.id, f.original_name).catch(err => setError(err.response?.data?.error || err.message))}>{t.download}</button>
-                  <button type="button" className={`secondary ${removingFileId === f.id ? 'btn-loading' : ''}`} onClick={() => removeFile(f.id)} disabled={removingFileId === f.id}>{removingFileId === f.id ? t.loading : t.remove}</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {!filesLoading && projectFiles.length === 0 && <p className="muted">{t.noFilesYet}</p>}
+        {!filesLoading && projectFiles.length > 0 && (() => {
+          const byFolder = {};
+          for (const f of projectFiles) {
+            const key = f.folder_display_name != null && f.folder_display_name !== '' ? f.folder_display_name : '\0';
+            if (!byFolder[key]) byFolder[key] = [];
+            byFolder[key].push(f);
+          }
+          const folderKeys = Object.keys(byFolder).sort((a, b) => (a === '\0' ? 1 : b === '\0' ? -1 : a.localeCompare(b)));
+          const toggleProjectFolder = (key) => {
+            setProjectFileFoldersCollapsed(prev => {
+              const next = new Set(prev);
+              if (next.has(key)) next.delete(key);
+              else next.add(key);
+              return next;
+            });
+          };
+          return (
+            <div className="rag-file-list">
+              {folderKeys.map(folderKey => {
+                const label = folderKey === '\0' ? t.noFolder : folderKey;
+                const files = byFolder[folderKey];
+                const isCollapsed = projectFileFoldersCollapsed.has(folderKey);
+                return (
+                  <div key={folderKey} className={`rag-folder-group ${isCollapsed ? 'is-collapsed' : 'is-expanded'}`}>
+                    <button type="button" className="rag-folder-toggle" onClick={() => toggleProjectFolder(folderKey)} aria-expanded={!isCollapsed}>
+                      <span className="rag-folder-chevron" aria-hidden>▼</span>
+                      <span className="rag-folder-name">📁 {label}</span>
+                      <span className="rag-folder-count">{files.length}</span>
+                    </button>
+                    {!isCollapsed && (
+                      <div className="rag-folder-files">
+                        {files.map(f => (
+                      <div key={f.id} className="list-item">
+                        <div>
+                          <span>{f.original_name}</span>
+                          {f.ingest_error && (
+                            <div className="rag-file-index-error" role="alert">
+                              {f.ingest_error}
+                            </div>
+                          )}
+                          {!f.ingest_error && !isIndexableFileName(f.original_name) && (
+                            <div className="rag-file-index-error" role="alert">
+                              {t.fileCannotBeIndexed}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap">
+                          <button type="button" className="secondary" title={f.storage_path ? t.download : t.downloadNotAvailable} disabled={!f.storage_path} onClick={() => f.storage_path && projectFilesApi.download(projectId, f.id, f.original_name).catch(err => setError(err.response?.data?.error || err.message))}>{t.download}</button>
+                          <button type="button" className={`secondary ${removingFileId === f.id ? 'btn-loading' : ''}`} onClick={() => removeFile(f.id)} disabled={removingFileId === f.id}>{removingFileId === f.id ? t.loading : t.remove}</button>
+                        </div>
+                      </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       </section>
 
       <section className="rag-section" aria-labelledby="docs-ask-heading">
