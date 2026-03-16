@@ -42,9 +42,9 @@ function AuthenticatedLayout({ user, onLogout }) {
           </nav>
           <div className="sidebar-user">
             <div className="main-header-user" style={{ padding: '8px 0' }}>
-              <div className="main-header-avatar">{(user?.username || 'A').charAt(0).toUpperCase()}</div>
+              <div className="main-header-avatar">{(user?.username || user?.full_name || 'A').charAt(0).toUpperCase()}</div>
               <div>
-                <div className="main-header-user-name">{user?.username}</div>
+                <div className="main-header-user-name">{user?.username || user?.full_name || ''}</div>
                 <div className="main-header-user-email">{user?.email || ''}</div>
               </div>
             </div>
@@ -142,7 +142,20 @@ function Home({ user, onLogout, dashboardMode = false }) {
           <div className="main-header-search">
             <input type="search" placeholder={t.searchProjects} value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <div className="main-header-actions" style={{ minWidth: 0 }} />
+          <div className="main-header-actions" style={{ minWidth: 0 }}>
+            {user && (
+              <>
+                <div className="main-header-user">
+                  <div className="main-header-avatar">{(user.username || user.full_name || 'A').charAt(0).toUpperCase()}</div>
+                  <div>
+                    <div className="main-header-user-name">{user.username || user.full_name || ''}</div>
+                    <div className="main-header-user-email">{user.email || ''}</div>
+                  </div>
+                </div>
+                <button type="button" className="secondary" onClick={onLogout}>{t.logout}</button>
+              </>
+            )}
+          </div>
         </header>
         <div className="main-content">
           {dashboardMode && (
@@ -299,10 +312,10 @@ function ProjectView({ user, onLogout }) {
             {user && (
               <>
                 <div className="main-header-user">
-                  <div className="main-header-avatar">{(user.username || 'A').charAt(0).toUpperCase()}</div>
+                  <div className="main-header-avatar">{(user.username || user.full_name || 'A').charAt(0).toUpperCase()}</div>
                   <div>
-                    <div className="main-header-user-name">{user.username}</div>
-                    <div className="main-header-user-email">{user.email || 'admin'}</div>
+                    <div className="main-header-user-name">{user.username || user.full_name || ''}</div>
+                    <div className="main-header-user-email">{user.email || ''}</div>
                   </div>
                 </div>
                 <button type="button" className="secondary" onClick={onLogout}>{t.logout}</button>
@@ -2462,7 +2475,9 @@ export default function App() {
     const storedUser = getStoredUser();
     if (token) {
       setAuth(token, storedUser);
-      authApi.me().then(me => setUser(me)).catch(() => { clearAuth(); setUser(null); }).finally(() => setAuthChecked(true));
+      setUser(storedUser || null);
+      setAuthChecked(true);
+      authApi.me().then(me => setUser(me)).catch(() => { clearAuth(); setUser(null); });
     } else {
       setUser(storedUser);
       setAuthChecked(true);
