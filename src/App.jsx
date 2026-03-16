@@ -196,8 +196,24 @@ function Home({ user, onLogout, dashboardMode = false }) {
         <div className="main-content">
           {dashboardMode && (
             <>
-              <h1 className="page-title">{t.dashboardMainTitle}</h1>
-              <p className="page-subtitle">{t.dashboardSubtitle}</p>
+              <header className="dashboard-header">
+                <h1 className="page-title">{t.dashboardMainTitle}</h1>
+                <p className="page-subtitle">{t.dashboardSubtitle}</p>
+              </header>
+
+              <section className="dashboard-quick-actions" aria-label={t.quickActions}>
+                <h2 className="dashboard-section-title">{t.quickActions}</h2>
+                <div className="dashboard-quick-actions-row">
+                  <button type="button" className="secondary" onClick={() => setShowNew(true)}>{t.quickActionNewProject}</button>
+                  {recentProjects[0] && (
+                    <>
+                      <button type="button" className="secondary" onClick={() => onProjectClick(recentProjects[0])}>{t.quickActionProjects}</button>
+                      <button type="button" className="secondary" onClick={() => navigate(`/project/${recentProjects[0].id}/section/lab`)}>{t.quickActionExperiments}</button>
+                      <button type="button" className="secondary" onClick={() => navigate(`/project/${recentProjects[0].id}/section/rag`)}>{t.quickActionDocuments}</button>
+                    </>
+                  )}
+                </div>
+              </section>
 
               <section className="dashboard-section" aria-labelledby="dashboard-lab-stats">
                 <h2 id="dashboard-lab-stats" className="dashboard-section-title">{t.labStatsTitle}</h2>
@@ -225,60 +241,49 @@ function Home({ user, onLogout, dashboardMode = false }) {
                 </div>
               </section>
 
-              <div className="dashboard-quick-actions">
-                <h2 className="dashboard-section-title">{t.quickActions}</h2>
-                <div className="dashboard-quick-actions-row">
-                  <button type="button" className="secondary" onClick={() => setShowNew(true)}>{t.quickActionNewProject}</button>
-                  {recentProjects[0] && (
-                    <>
-                      <button type="button" className="secondary" onClick={() => onProjectClick(recentProjects[0])}>{t.quickActionProjects}</button>
-                      <button type="button" className="secondary" onClick={() => navigate(`/project/${recentProjects[0].id}/section/lab`)}>{t.quickActionExperiments}</button>
-                      <button type="button" className="secondary" onClick={() => navigate(`/project/${recentProjects[0].id}/section/rag`)}>{t.quickActionDocuments}</button>
-                    </>
+              <section className="dashboard-recent-section" aria-label={t.recentActivity}>
+                <h2 className="dashboard-section-title">פעילות ופריטים אחרונים</h2>
+                <div className="dashboard-recent-grid">
+                  {recentProjects.length > 0 && (
+                    <div className="dashboard-recent-card card dashboard-recent-card-activity">
+                      <h3>{t.recentActivity}</h3>
+                      <ul className="dashboard-recent-list">
+                        {recentProjects.map(p => (
+                          <li key={p.id}><button type="button" className="link" onClick={() => onProjectClick(p)}>{p.name}</button></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {recentExperimentsList.length > 0 && (
+                    <div className="dashboard-recent-card card">
+                      <h3>{t.recentExperiments}</h3>
+                      <ul className="dashboard-recent-list">
+                        {recentExperimentsList.map((e, i) => (
+                          <li key={e.id || e.experiment_id || i}>
+                            <button type="button" className="link" onClick={() => navigate(`/project/${e.projectId}/section/lab`)}>
+                              {(e.experiment_id || e.formula || t.navExperiments).toString().slice(0, 40)} — {e.projectName || ''}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {recentDocumentsList.length > 0 && (
+                    <div className="dashboard-recent-card card">
+                      <h3>{t.recentDocuments}</h3>
+                      <ul className="dashboard-recent-list">
+                        {recentDocumentsList.map((f, i) => (
+                          <li key={f.id || i}>
+                            <button type="button" className="link" onClick={() => navigate(`/project/${f.projectId}/section/rag`)}>
+                              {(f.original_name || f.filename || '').slice(0, 35)}{(f.original_name || f.filename || '').length > 35 ? '…' : ''} — {f.projectName || ''}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                 </div>
-              </div>
-
-              <div className="dashboard-recent-grid">
-                {recentExperimentsList.length > 0 && (
-                  <div className="dashboard-recent-card card">
-                    <h3>{t.recentExperiments}</h3>
-                    <ul className="dashboard-recent-list">
-                      {recentExperimentsList.map((e, i) => (
-                        <li key={e.id || e.experiment_id || i}>
-                          <button type="button" className="link" onClick={() => navigate(`/project/${e.projectId}/section/lab`)}>
-                            {(e.experiment_id || e.formula || t.navExperiments).toString().slice(0, 40)} — {e.projectName || ''}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {recentDocumentsList.length > 0 && (
-                  <div className="dashboard-recent-card card">
-                    <h3>{t.recentDocuments}</h3>
-                    <ul className="dashboard-recent-list">
-                      {recentDocumentsList.map((f, i) => (
-                        <li key={f.id || i}>
-                          <button type="button" className="link" onClick={() => navigate(`/project/${f.projectId}/section/rag`)}>
-                            {(f.original_name || f.filename || '').slice(0, 35)}{(f.original_name || f.filename || '').length > 35 ? '…' : ''} — {f.projectName || ''}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {recentProjects.length > 0 && (
-                  <div className="dashboard-recent-card card">
-                    <h3>{t.recentActivity}</h3>
-                    <ul className="dashboard-recent-list">
-                      {recentProjects.map(p => (
-                        <li key={p.id}><button type="button" className="link" onClick={() => onProjectClick(p)}>{p.name}</button></li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
+              </section>
             </>
           )}
           {!dashboardMode && (

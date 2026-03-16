@@ -318,7 +318,13 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
 .overview-card-label { font-size: 0.9rem; color: var(--muted); margin: 0 0 8px 0; }
 .overview-card-meta { font-size: 0.8rem; color: var(--muted); }
 
-/* ---------- Dashboard summary (lab central dashboard) ---------- */
+/* ---------- Dashboard (main / home) ---------- */
+.dashboard-header {
+  margin-bottom: 24px;
+}
+.dashboard-header .page-title { margin-bottom: 4px; }
+.dashboard-header .page-subtitle { margin: 0; }
+
 .dashboard-summary-row {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -346,12 +352,19 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
 }
 .dashboard-recent-card {
   margin-bottom: 24px;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-.dashboard-recent-card h3 { margin: 0 0 12px 0; font-size: 1rem; }
+.dashboard-recent-card h3 { margin: 0 0 12px 0; font-size: 1rem; flex-shrink: 0; }
 .dashboard-recent-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
 }
 .dashboard-recent-list li { margin-bottom: 8px; }
 .dashboard-recent-list button.link {
@@ -364,6 +377,10 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
   text-align: right;
   width: 100%;
   text-decoration: none;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .dashboard-recent-list button.link:hover { text-decoration: underline; }
 
@@ -372,7 +389,21 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
 .dashboard-quick-actions { margin-bottom: 28px; }
 .dashboard-quick-actions-row { display: flex; flex-wrap: wrap; gap: 10px; }
 .dashboard-quick-actions-row .secondary { margin: 0; }
-.dashboard-recent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+
+.dashboard-recent-section { margin-bottom: 28px; }
+.dashboard-recent-section .dashboard-section-title { margin-bottom: 16px; }
+.dashboard-recent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+@media (min-width: 960px) {
+  .dashboard-recent-grid {
+    grid-template-columns: minmax(280px, 1.15fr) minmax(260px, 1fr) minmax(260px, 1fr);
+  }
+}
+.dashboard-recent-card-activity { min-width: 0; }
 
 /* ---------- Tabs (pill style under toolbar) ---------- */
 .tabs {
