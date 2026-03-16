@@ -758,12 +758,13 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
   overflow: auto;
   padding: 24px;
 }
-/* RAG tab in fullscreen: fill the body so the card uses full space */
+/* RAG tab in fullscreen: card fills body and contains all content with internal scroll */
 .fullscreen-body:has(.rag-tab) {
   padding: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 .fullscreen-body .card.rag-tab.tab-card {
   max-width: none;
@@ -775,8 +776,9 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
   margin: 0;
   border-radius: 0;
   border-width: 0;
+  overflow: auto;
 }
-.fullscreen-body .rag-tab .rag-file-list { max-height: none; flex: 1; overflow: auto; }
+.fullscreen-body .rag-tab .rag-file-list { max-height: none; flex: 1; overflow: auto; min-height: 0; }
 
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
 .modal-overlay .modal { max-width: 440px; margin: 0; box-shadow: 0 8px 32px rgba(0,0,0,0.12); }

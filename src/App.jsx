@@ -1313,7 +1313,15 @@ function RagTab({ projectId }) {
     if (!projectId) return;
     projectFilesApi.list(projectId).then(d => {
       const files = d.files || [];
-      setProjectFiles(files.filter(f => f.project_id == null || f.project_id === projectId));
+      const filtered = files.filter(f => f.project_id == null || f.project_id === projectId);
+      setProjectFiles(filtered);
+      const byFolder = {};
+      for (const f of filtered) {
+        const key = f.folder_display_name != null && f.folder_display_name !== '' ? f.folder_display_name : '\0';
+        if (!byFolder[key]) byFolder[key] = [];
+        byFolder[key].push(f);
+      }
+      setProjectFileFoldersCollapsed(new Set(Object.keys(byFolder)));
       setFilesLoading(false);
     }).catch(() => setFilesLoading(false));
   };
