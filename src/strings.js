@@ -133,6 +133,8 @@ export default {
   ragTitle: 'שאלות (מטריה)',
   matriyaConnected: 'חיבור למטריה פעיל',
   matriyaNotSet: 'כתובת מטריה לא מוגדרת או לא זמינה (הגדר MATRIYA_BACK_URL ב־.env של maneger-back)',
+  ragConnected: 'חיבור ל־RAG פעיל',
+  ragNotAvailable: 'חיבור ל־RAG לא פעיל. בדוק ש־POSTGRES_URL ו־OPENAI_API_KEY מוגדרים ב־maneger-back (Vercel).',
   queryOver: 'חיפוש בתוך',
   allFiles: 'כל הקבצים',
   selectFileToAsk: 'בחר קובץ לשאלה',

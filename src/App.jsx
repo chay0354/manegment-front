@@ -1330,7 +1330,9 @@ function RagTab({ projectId }) {
   };
 
   React.useEffect(() => {
-    ragApi.health().then(setHealth).catch(() => setHealth({ ok: false }));
+    ragApi.health()
+      .then(data => setHealth(typeof data?.ok === 'boolean' ? data : { ok: false }))
+      .catch(err => setHealth({ ok: false, error: err.response?.data?.error || err.message || null }));
   }, []);
   React.useEffect(() => {
     if (projectId) loadFiles();
@@ -1596,7 +1598,7 @@ function RagTab({ projectId }) {
     <div className="card tab-card rag-tab">
       <h3>{t.docsManagementTitle}</h3>
       <p style={{ color: 'var(--muted)', fontSize: '0.95rem', marginBottom: 20 }}>{t.docsManagementIntro}</p>
-      {health && <p style={{ color: health.ok ? 'var(--success)' : 'var(--muted)', fontSize: '0.85rem', marginBottom: 16 }}>{health.ok ? t.matriyaConnected : t.matriyaNotSet}</p>}
+      {health && <p style={{ color: health.ok ? 'var(--success)' : 'var(--muted)', fontSize: '0.85rem', marginBottom: 16 }}>{health.ok ? t.ragConnected : (health.error || t.ragNotAvailable)}</p>}
       {error && <p className="error" style={{ marginBottom: 12 }}>{error}</p>}
 
       <section className="rag-section" aria-labelledby="docs-upload-heading">
@@ -1607,7 +1609,7 @@ function RagTab({ projectId }) {
             type="button"
             className="rag-file-button"
             disabled={!health?.ok}
-            title={!health?.ok ? t.matriyaNotSet : undefined}
+            title={!health?.ok ? (health?.error || t.ragNotAvailable) : undefined}
             onClick={() => {
               if (!health?.ok) return;
               setSharepointSearchQuery('');
@@ -2076,9 +2078,9 @@ function RagTab({ projectId }) {
           </div>
         )}
         <label htmlFor="rag-query-input">{t.askQuestion}</label>
-        <textarea id="rag-query-input" value={query} onChange={e => setQuery(e.target.value)} placeholder={t.questionPlaceholder} disabled={!health?.ok} rows={4} aria-describedby={!health?.ok ? 'rag-query-disabled-hint' : undefined} />
-        {!health?.ok && <p id="rag-query-disabled-hint" className="muted" style={{ fontSize: '0.85rem', marginTop: 4 }}>{t.matriyaNotSet}</p>}
-        <button type="button" onClick={runSearch} disabled={loading || !health?.ok || projectFiles.length === 0} className={loading ? 'btn-loading' : ''}>{loading ? t.loading : t.run}</button>
+        <textarea id="rag-query-input" value={query} onChange={e => setQuery(e.target.value)} placeholder={t.questionPlaceholder} rows={4} aria-describedby={!health?.ok ? 'rag-query-disabled-hint' : undefined} />
+        {!health?.ok && <p id="rag-query-disabled-hint" className="muted" style={{ fontSize: '0.85rem', marginTop: 4 }}>{health?.error || t.ragNotAvailable}</p>}
+        <button type="button" onClick={runSearch} disabled={loading || !health?.ok || projectFiles.length === 0} className={loading ? 'btn-loading' : ''} title={!health?.ok ? (health?.error || t.ragNotAvailable) : undefined}>{loading ? t.loading : t.run}</button>
         {result && (
           <>
             <div className="flex gap mt-16" style={{ flexWrap: 'wrap' }}>

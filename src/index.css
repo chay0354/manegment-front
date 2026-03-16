@@ -548,8 +548,9 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
 }
 .rag-file-button:hover { background: var(--accent-hover); }
 .rag-tab .rag-section:last-of-type { flex: 1; display: flex; flex-direction: column; min-height: 200px; }
-.rag-tab .rag-section-ask { position: relative; z-index: 1; }
-.rag-tab .rag-section-ask textarea { touch-action: manipulation; }
+.rag-tab .rag-section-ask { position: relative; z-index: 1; pointer-events: auto; }
+.rag-tab .rag-section-ask textarea,
+.rag-tab .rag-section-ask button { pointer-events: auto; touch-action: manipulation; }
 .rag-tab textarea { min-height: 120px; margin-bottom: 12px; flex: 1; resize: vertical; }
 .rag-result { white-space: pre-wrap; padding: 16px; background: var(--bg); border-radius: var(--radius-sm); margin-top: 12px; flex: 1; overflow: auto; min-height: 100px; }
 .rag-result-markdown { white-space: normal; }
