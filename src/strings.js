@@ -184,6 +184,8 @@ export default {
   emailAttachTooMany: 'ניתן לצרף לכל היותר 15 קבצים בסך הכל (מהפרויקט ומהמחשב).',
   emailAttachReadError: 'קריאת קובץ מהמחשב נכשלה. נסה קובץ אחר.',
   emailAttachNoFiles: 'אין קבצים ברשימת המסמכים. העלה או סנכרן קבצים בלשונית המסמכים.',
+  emailAttachNoAttachableFiles:
+    'אין כרגע קבצים שניתן לצרף מהמסמכים. מוצגים כאן רק קבצים שנשמרו באחסון הפרויקט — העלה מחדש או סנכרן מ־SharePoint.',
   emailAttachNoStorageShort: 'לא זמין לצירוף',
   emailAttachNoStorage:
     'קובץ זה לא שמור באחסון הפרויקט (למשל הועלה ישירות ל־RAG בלי נתיב). רק קבצים עם אחסון (SharePoint / מסמכים) ניתנים לצירוף.',
@@ -303,6 +305,8 @@ export default {
   labAiNeedContext: 'הזן או העלה נתוני ניסוי למעלה ואז בחר סוג ניתוח.',
   labAiThinking: 'מחשב...',
   labGetAiInsight: 'קבל תובנה מ־AI',
+  labSendAsEmail: 'שלח במייל',
+  labEmailSubjectPrefix: 'מעבדה – ',
 
   labSaveExperiment: 'שמור ניסוי',
   labSavedExperimentNamePlaceholder: 'שם לניסוי השמור',
@@ -321,6 +325,9 @@ export default {
   dashboard: 'לוח בקרה',
   dashboardMainTitle: 'דשבורד ראשי',
   dashboardSubtitle: 'סקירה מרכזית של המעבדה – פרויקטים, ניסויים ופעילות.',
+  dashboardRecentSectionTitle: 'פעילות ופריטים אחרונים',
+  dashboardYourProjects: 'הפרויקטים שלך',
+  dashboardProjectsMeta: (n) => (n === 0 ? 'אין עדיין פרויקטים' : n === 1 ? 'פרויקט אחד' : `${n} פרויקטים`),
   labStatsTitle: 'סטטיסטיקה של המעבדה',
   navDashboard: 'לוח בקרה',
   navProjects: 'פרויקטים',

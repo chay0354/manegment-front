@@ -203,82 +203,136 @@ function Home({ user, onLogout, dashboardMode = false }) {
         </header>
         <div className="main-content">
           {dashboardMode && (
-            <>
-              <header className="dashboard-header">
-                <h1 className="page-title">{t.dashboardMainTitle}</h1>
-                <p className="page-subtitle">{t.dashboardSubtitle}</p>
+            <div className="dashboard-page">
+              <header className="dashboard-hero">
+                <div className="dashboard-hero-text">
+                  <span className="dashboard-eyebrow">{t.dashboard}</span>
+                  <h1 className="dashboard-hero-title">{t.dashboardMainTitle}</h1>
+                  <p className="dashboard-hero-lead">{t.dashboardSubtitle}</p>
+                </div>
+                <button
+                  type="button"
+                  className="dashboard-hero-cta"
+                  onClick={() => setShowNew(true)}
+                  disabled={creatingProject}
+                >
+                  + {t.newProject}
+                </button>
               </header>
 
-              <section className="dashboard-section" aria-labelledby="dashboard-lab-stats">
-                <h2 id="dashboard-lab-stats" className="dashboard-section-title">{t.labStatsTitle}</h2>
-                <div className="dashboard-summary-row">
-                  <div className="dashboard-summary-card">
-                    <span className="dashboard-summary-value">{projects.length}</span>
-                    <span className="dashboard-summary-label">{t.projects}</span>
-                  </div>
-                  <div className="dashboard-summary-card">
-                    <span className="dashboard-summary-value">{totalTasks}</span>
-                    <span className="dashboard-summary-label">{t.tasksCount}</span>
-                  </div>
-                  <div className="dashboard-summary-card">
-                    <span className="dashboard-summary-value">{totalExperiments}</span>
-                    <span className="dashboard-summary-label">{t.navExperiments}</span>
-                  </div>
-                  <div className="dashboard-summary-card">
-                    <span className="dashboard-summary-value">{totalMaterials}</span>
-                    <span className="dashboard-summary-label">{t.navMaterials}</span>
-                  </div>
-                  <div className="dashboard-summary-card">
-                    <span className="dashboard-summary-value">{totalFiles}</span>
-                    <span className="dashboard-summary-label">{t.navDocuments}</span>
-                  </div>
+              <section className="dashboard-stats-panel" aria-labelledby="dashboard-lab-stats">
+                <div className="dashboard-section-heading-row">
+                  <h2 id="dashboard-lab-stats" className="dashboard-section-heading">{t.labStatsTitle}</h2>
                 </div>
+                <ul className="dashboard-stat-grid">
+                  <li className="dashboard-stat-tile dashboard-stat-tile--primary">
+                    <span className="dashboard-stat-icon" aria-hidden="true">📁</span>
+                    <div className="dashboard-stat-body">
+                      <span className="dashboard-stat-value">{projects.length}</span>
+                      <span className="dashboard-stat-label">{t.projects}</span>
+                    </div>
+                  </li>
+                  <li className="dashboard-stat-tile">
+                    <span className="dashboard-stat-icon" aria-hidden="true">📋</span>
+                    <div className="dashboard-stat-body">
+                      <span className="dashboard-stat-value">{totalTasks}</span>
+                      <span className="dashboard-stat-label">{t.tasksCount}</span>
+                    </div>
+                  </li>
+                  <li className="dashboard-stat-tile">
+                    <span className="dashboard-stat-icon" aria-hidden="true">🧪</span>
+                    <div className="dashboard-stat-body">
+                      <span className="dashboard-stat-value">{totalExperiments}</span>
+                      <span className="dashboard-stat-label">{t.navExperiments}</span>
+                    </div>
+                  </li>
+                  <li className="dashboard-stat-tile">
+                    <span className="dashboard-stat-icon" aria-hidden="true">🧱</span>
+                    <div className="dashboard-stat-body">
+                      <span className="dashboard-stat-value">{totalMaterials}</span>
+                      <span className="dashboard-stat-label">{t.navMaterials}</span>
+                    </div>
+                  </li>
+                  <li className="dashboard-stat-tile">
+                    <span className="dashboard-stat-icon" aria-hidden="true">📄</span>
+                    <div className="dashboard-stat-body">
+                      <span className="dashboard-stat-value">{totalFiles}</span>
+                      <span className="dashboard-stat-label">{t.navDocuments}</span>
+                    </div>
+                  </li>
+                </ul>
               </section>
 
-              <section className="dashboard-recent-section" aria-label={t.recentActivity}>
-                <h2 className="dashboard-section-title">פעילות ופריטים אחרונים</h2>
-                <div className="dashboard-recent-grid">
-                  {recentProjects.length > 0 && (
-                    <div className="dashboard-recent-card card dashboard-recent-card-activity">
-                      <h3>{t.recentActivity}</h3>
-                      <ul className="dashboard-recent-list">
-                        {recentProjects.map(p => (
-                          <li key={p.id}><button type="button" className="link" onClick={() => onProjectClick(p)}>{p.name}</button></li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {recentExperimentsList.length > 0 && (
-                    <div className="dashboard-recent-card card">
-                      <h3>{t.recentExperiments}</h3>
-                      <ul className="dashboard-recent-list">
-                        {recentExperimentsList.map((e, i) => (
-                          <li key={e.id || e.experiment_id || i}>
-                            <button type="button" className="link" onClick={() => navigate(`/project/${e.projectId}/section/lab`)}>
-                              {(e.experiment_id || e.formula || t.navExperiments).toString().slice(0, 40)} — {e.projectName || ''}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {recentDocumentsList.length > 0 && (
-                    <div className="dashboard-recent-card card">
-                      <h3>{t.recentDocuments}</h3>
-                      <ul className="dashboard-recent-list">
-                        {recentDocumentsList.map((f, i) => (
-                          <li key={f.id || i}>
-                            <button type="button" className="link" onClick={() => navigate(`/project/${f.projectId}/section/rag`)}>
-                              {(f.original_name || f.filename || '').slice(0, 35)}{(f.original_name || f.filename || '').length > 35 ? '…' : ''} — {f.projectName || ''}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </section>
-            </>
+              {(recentProjects.length > 0 || recentExperimentsList.length > 0 || recentDocumentsList.length > 0) && (
+                <section className="dashboard-recent-panel" aria-labelledby="dashboard-recent-title">
+                  <div className="dashboard-section-heading-row">
+                    <h2 id="dashboard-recent-title" className="dashboard-section-heading">{t.dashboardRecentSectionTitle}</h2>
+                  </div>
+                  <div className="dashboard-recent-grid">
+                    {recentProjects.length > 0 && (
+                      <article className="dashboard-recent-card dashboard-recent-card--projects">
+                        <header className="dashboard-recent-card-head">
+                          <h3>{t.recentActivity}</h3>
+                          <span className="dashboard-recent-card-icon" aria-hidden="true">📌</span>
+                        </header>
+                        <ul className="dashboard-recent-list">
+                          {recentProjects.map(p => (
+                            <li key={p.id}>
+                              <button type="button" className="dashboard-recent-link" onClick={() => onProjectClick(p)}>
+                                <span className="dashboard-recent-link-title">{p.name}</span>
+                                <span className="dashboard-recent-link-arrow" aria-hidden="true">‹</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </article>
+                    )}
+                    {recentExperimentsList.length > 0 && (
+                      <article className="dashboard-recent-card dashboard-recent-card--lab">
+                        <header className="dashboard-recent-card-head">
+                          <h3>{t.recentExperiments}</h3>
+                          <span className="dashboard-recent-card-icon" aria-hidden="true">🧪</span>
+                        </header>
+                        <ul className="dashboard-recent-list">
+                          {recentExperimentsList.map((e, i) => (
+                            <li key={e.id || e.experiment_id || i}>
+                              <button type="button" className="dashboard-recent-link" onClick={() => navigate(`/project/${e.projectId}/section/lab`)}>
+                                <span className="dashboard-recent-link-title">
+                                  {(e.experiment_id || e.formula || t.navExperiments).toString().slice(0, 40)}
+                                  <span className="dashboard-recent-link-meta">{e.projectName || ''}</span>
+                                </span>
+                                <span className="dashboard-recent-link-arrow" aria-hidden="true">‹</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </article>
+                    )}
+                    {recentDocumentsList.length > 0 && (
+                      <article className="dashboard-recent-card dashboard-recent-card--docs">
+                        <header className="dashboard-recent-card-head">
+                          <h3>{t.recentDocuments}</h3>
+                          <span className="dashboard-recent-card-icon" aria-hidden="true">📁</span>
+                        </header>
+                        <ul className="dashboard-recent-list">
+                          {recentDocumentsList.map((f, i) => (
+                            <li key={f.id || i}>
+                              <button type="button" className="dashboard-recent-link" onClick={() => navigate(`/project/${f.projectId}/section/rag`)}>
+                                <span className="dashboard-recent-link-title">
+                                  {(f.original_name || f.filename || '').slice(0, 35)}{(f.original_name || f.filename || '').length > 35 ? '…' : ''}
+                                  <span className="dashboard-recent-link-meta">{f.projectName || ''}</span>
+                                </span>
+                                <span className="dashboard-recent-link-arrow" aria-hidden="true">‹</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </article>
+                    )}
+                  </div>
+                </section>
+              )}
+            </div>
           )}
           {!dashboardMode && (
             <>
@@ -287,9 +341,16 @@ function Home({ user, onLogout, dashboardMode = false }) {
             </>
           )}
           {error && <p className="error">{error}</p>}
-          <div className="main-content-toolbar">
-            <button onClick={() => setShowNew(!showNew)}>{showNew ? t.cancel : `+ ${t.newProject}`}</button>
-          </div>
+          {!dashboardMode && (
+            <div className="main-content-toolbar">
+              <button onClick={() => setShowNew(!showNew)}>{showNew ? t.cancel : `+ ${t.newProject}`}</button>
+            </div>
+          )}
+          {dashboardMode && showNew && (
+            <div className="dashboard-toolbar-compact">
+              <button type="button" className="secondary" onClick={() => setShowNew(false)} disabled={creatingProject}>{t.cancel}</button>
+            </div>
+          )}
         {showNew && (
           <div className="card">
             <h3>{t.newProject}</h3>
@@ -299,8 +360,16 @@ function Home({ user, onLogout, dashboardMode = false }) {
           </div>
         )}
         {loading && <p className="loading">{t.loading}</p>}
+        {dashboardMode && !loading && (
+          <section className="dashboard-projects-block" aria-labelledby="dashboard-projects-heading">
+            <div className="dashboard-projects-intro">
+              <h2 id="dashboard-projects-heading" className="dashboard-section-heading">{t.dashboardYourProjects}</h2>
+              <p className="dashboard-projects-meta">{t.dashboardProjectsMeta(filteredProjects.length)}</p>
+            </div>
+          </section>
+        )}
         {!loading && (
-          <div className="grid-2">
+          <div className={`grid-2${dashboardMode ? ' dashboard-projects-grid' : ''}`}>
             {filteredProjects.map(p => (
               <div key={p.id} className={`project-card ${loadingProjectId === p.id ? 'project-card-loading' : ''}`} onClick={() => onProjectClick(p)}>
                 {loadingProjectId === p.id ? (
@@ -342,6 +411,8 @@ function Home({ user, onLogout, dashboardMode = false }) {
 }
 
 const TABS = ['overview', 'tasks', 'milestones', 'notes', 'lab', 'rag', 'emails', 'chat', 'settings'];
+/** Dashboard tiles only — settings stays in sidebar (`/section/settings`). */
+const WIDGET_TABS = TABS.filter(id => id !== 'settings');
 const TAB_LABELS = { overview: `📊 ${t.overview}`, tasks: `📋 ${t.tasks}`, milestones: `🎯 ${t.milestones}`, notes: `📝 ${t.notes}`, lab: `🧪 ${t.labTab}`, rag: `📁 ${t.docsManagementTab}`, emails: `✉️ ${t.emailsTab}`, chat: `💬 ${t.chat}`, settings: `⚙️ ${t.settings}` };
 const TAB_TITLES = { overview: t.overview, tasks: t.tasks, milestones: t.milestones, notes: t.notes, lab: t.labTab, rag: t.docsManagementTab, emails: t.emailsTab, chat: t.chat, settings: t.settings };
 
@@ -392,12 +463,6 @@ function ProjectView({ user, onLogout }) {
     setFullScreenSectionState(s);
     if (s) {
       navigate(`/project/${id}/section/${s}`, { replace: true });
-      if (s === 'chat') {
-        chatApi.count(id).then(({ count }) => {
-          localStorage.setItem(`chat_last_seen_${id}`, String(count || 0));
-          setChatUnreadCount(0);
-        }).catch(() => {});
-      }
     } else {
       navigate(`/project/${id}`, { replace: true });
     }
@@ -405,15 +470,29 @@ function ProjectView({ user, onLogout }) {
   React.useEffect(() => {
     if (sectionId && TABS.includes(sectionId)) setFullScreenSectionState(sectionId);
   }, [sectionId]);
-  React.useEffect(() => {
+
+  const refreshChatUnread = React.useCallback(() => {
     if (!id) return;
-    chatApi.count(id)
-      .then(({ count }) => {
-        const lastSeen = parseInt(localStorage.getItem(`chat_last_seen_${id}`) || '0', 10);
-        setChatUnreadCount(Math.max(0, (count || 0) - lastSeen));
-      })
+    chatApi
+      .unread(id)
+      .then(({ unread }) => setChatUnreadCount(Number(unread) || 0))
       .catch(() => {});
-  }, [id, fullScreenSection]);
+  }, [id]);
+
+  React.useEffect(() => {
+    refreshChatUnread();
+  }, [id, fullScreenSection, refreshChatUnread]);
+
+  React.useEffect(() => {
+    if (!id) return undefined;
+    const timer = setInterval(refreshChatUnread, 20000);
+    const onFocus = () => refreshChatUnread();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [id, refreshChatUnread]);
 
   if (loading || !project) return <div className="main-content"><p className="loading">{t.loading}</p></div>;
   if (error) return <div className="main-content"><p className="error">{error}</p><button onClick={() => navigate('/')}>{t.back}</button></div>;
@@ -470,10 +549,10 @@ function ProjectView({ user, onLogout }) {
             </div>
           </div>
           <div className="widgets-grid">
-            {TABS.map(tabId => (
+            {WIDGET_TABS.map(tabId => (
               <button key={tabId} type="button" className="widget-card" onClick={() => setFullScreenSection(tabId)}>
                 <span className="widget-card-icon-wrapper">
-                  <span className="widget-card-icon">{tabId === 'overview' ? '📊' : tabId === 'tasks' ? '📋' : tabId === 'milestones' ? '🎯' : tabId === 'notes' ? '📝' : tabId === 'lab' ? '🧪' : tabId === 'rag' ? '📁' : tabId === 'emails' ? '✉️' : tabId === 'chat' ? '💬' : '⚙️'}</span>
+                  <span className="widget-card-icon">{tabId === 'overview' ? '📊' : tabId === 'tasks' ? '📋' : tabId === 'milestones' ? '🎯' : tabId === 'notes' ? '📝' : tabId === 'lab' ? '🧪' : tabId === 'rag' ? '📁' : tabId === 'emails' ? '✉️' : '💬'}</span>
                   {tabId === 'chat' && chatUnreadCount > 0 && (
                     <span className="widget-card-badge" aria-label={t.chatUnreadCount(chatUnreadCount)}>{chatUnreadCount > 99 ? '99+' : chatUnreadCount}</span>
                   )}
@@ -502,7 +581,7 @@ function ProjectView({ user, onLogout }) {
                   {fullScreenSection === 'lab' && <LabTab projectId={id} />}
                   {fullScreenSection === 'rag' && <RagTab projectId={id} />}
                   {fullScreenSection === 'emails' && <EmailsTab projectId={id} />}
-                  {fullScreenSection === 'chat' && <ChatTab projectId={id} />}
+                  {fullScreenSection === 'chat' && <ChatTab projectId={id} onUnreadChange={refreshChatUnread} />}
                   {fullScreenSection === 'settings' && <SettingsTab projectId={id} project={project} setProject={setProject} navigate={navigate} projectRole={projectRole} user={user} />}
                 </div>
               </div>
@@ -1029,6 +1108,7 @@ function NotesTab({ projectId }) {
 const LAB_AI_SECTION_IDS = ['insights', 'contradictions', 'failure-patterns', 'snapshot', 'formula-validate', 'formulation-intelligence', 'similar-experiments', 'relations', 'guard', 'experiments', 'suggestion-engine'];
 
 function LabTab({ projectId }) {
+  const navigate = useNavigate();
   const [experiments, setExperiments] = React.useState([]);
   const [sessions, setSessions] = React.useState([]);
   const [materials, setMaterials] = React.useState([]);
@@ -1277,7 +1357,28 @@ function LabTab({ projectId }) {
               <div className="rag-result rag-result-markdown" style={{ marginBottom: 12 }}>
                 <ReactMarkdown>{aiResultBySection[activeSection]}</ReactMarkdown>
               </div>
-              <button type="button" className="secondary" onClick={() => fetchAiInsight(activeSection)}>{t.refresh}</button>
+              <div className="flex gap" style={{ flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                <button type="button" className="secondary" onClick={() => fetchAiInsight(activeSection)}>{t.refresh}</button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    const text = aiResultBySection[activeSection];
+                    if (!text || !String(text).trim()) return;
+                    const sectionLabel = sections.find(s => s.id === activeSection)?.label || t.labTab;
+                    navigate(`/project/${projectId}/section/emails`, {
+                      state: {
+                        fromLabEmail: {
+                          body: String(text).trim(),
+                          subject: `${t.labEmailSubjectPrefix}${sectionLabel}`
+                        }
+                      }
+                    });
+                  }}
+                >
+                  {t.labSendAsEmail}
+                </button>
+              </div>
             </>
           )}
           {!aiLoadingSection && !aiResultBySection[activeSection] && (
@@ -2260,6 +2361,7 @@ function emailAttachmentsList(row) {
 
 function EmailsTab({ projectId }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [list, setList] = React.useState([]);
   const [listLoading, setListLoading] = React.useState(true);
   const [listError, setListError] = React.useState(null);
@@ -2290,6 +2392,16 @@ function EmailsTab({ projectId }) {
     composeLocalFilesLenRef.current = composeLocalFiles.length;
   }, [composeLocalFiles.length]);
 
+  const attachableComposeFiles = React.useMemo(
+    () => composeFilesList.filter(f => f.storage_path && String(f.storage_path).trim()),
+    [composeFilesList]
+  );
+
+  React.useEffect(() => {
+    const allowed = new Set(attachableComposeFiles.map(f => f.id));
+    setComposeAttachIds(ids => ids.filter(id => allowed.has(id)));
+  }, [attachableComposeFiles]);
+
   const fetchEmails = React.useCallback(() => {
     setListLoading(true);
     setListError(null);
@@ -2304,6 +2416,22 @@ function EmailsTab({ projectId }) {
   }, [projectId]);
 
   React.useEffect(() => { fetchEmails(); }, [fetchEmails]);
+
+  React.useEffect(() => {
+    const prefill = location.state?.fromLabEmail;
+    if (!prefill || typeof prefill.body !== 'string' || !prefill.body.trim()) return;
+    setBody(prefill.body.trim());
+    if (typeof prefill.subject === 'string' && prefill.subject.trim()) setSubject(prefill.subject.trim());
+    setTo('');
+    setComposeAttachIds([]);
+    setComposeLocalFiles([]);
+    setShowCompose(true);
+    setSelectedId(null);
+    setSelected(null);
+    setFormError(null);
+    setFormSuccess(false);
+    navigate(`/project/${projectId}/section/emails`, { replace: true, state: {} });
+  }, [location.state, projectId, navigate]);
 
   React.useEffect(() => {
     if (!selectedId) {
@@ -2535,18 +2663,20 @@ function EmailsTab({ projectId }) {
             {!composeFilesLoading && composeFilesList.length === 0 && (
               <p className="loading">{t.emailAttachNoFiles}</p>
             )}
-            {!composeFilesLoading && composeFilesList.length > 0 && (
+            {!composeFilesLoading && composeFilesList.length > 0 && attachableComposeFiles.length === 0 && (
+              <p className="loading">{t.emailAttachNoAttachableFiles}</p>
+            )}
+            {!composeFilesLoading && attachableComposeFiles.length > 0 && (
               <ul className="emails-compose-attach-list emails-attach-modal-list modal-scroll">
-                {composeFilesList.map(f => {
-                  const canAttach = !!(f.storage_path && String(f.storage_path).trim());
+                {attachableComposeFiles.map(f => {
                   const checked = composeAttachIds.includes(f.id);
                   return (
                     <li key={f.id}>
-                      <label className={`emails-compose-attach-item${!canAttach ? ' emails-compose-attach-item-disabled' : ''}`}>
+                      <label className="emails-compose-attach-item">
                         <input
                           type="checkbox"
-                          disabled={!canAttach || sending}
-                          checked={canAttach && checked}
+                          disabled={sending}
+                          checked={checked}
                           onChange={e => {
                             setComposeAttachIds(ids => {
                               if (e.target.checked) {
@@ -2559,11 +2689,6 @@ function EmailsTab({ projectId }) {
                           }}
                         />
                         <span dir="auto" className="emails-compose-attach-name">{f.original_name || f.id}</span>
-                        {!canAttach && (
-                          <span className="emails-compose-attach-hint" title={t.emailAttachNoStorage}>
-                            ({t.emailAttachNoStorageShort})
-                          </span>
-                        )}
                       </label>
                     </li>
                   );
@@ -2698,7 +2823,7 @@ function EmailsTab({ projectId }) {
   );
 }
 
-function ChatTab({ projectId }) {
+function ChatTab({ projectId, onUnreadChange }) {
   const [messages, setMessages] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [input, setInput] = React.useState('');
@@ -2706,16 +2831,34 @@ function ChatTab({ projectId }) {
   const [error, setError] = React.useState(null);
   const listRef = React.useRef(null);
 
+  const markReadThroughMessages = React.useCallback((msgs) => {
+    if (!msgs || msgs.length === 0) {
+      return chatApi.markRead(projectId).then(() => { onUnreadChange?.(); });
+    }
+    let maxMs = 0;
+    for (const m of msgs) {
+      if (!m.created_at) continue;
+      const t = Date.parse(m.created_at);
+      if (!Number.isNaN(t) && t > maxMs) maxMs = t;
+    }
+    const iso = maxMs > 0 ? new Date(maxMs).toISOString() : undefined;
+    return (iso ? chatApi.markRead(projectId, iso) : chatApi.markRead(projectId))
+      .then(() => { onUnreadChange?.(); })
+      .catch(() => {});
+  }, [projectId, onUnreadChange]);
+
   const load = () => {
     chatApi.list(projectId)
-      .then(d => { setMessages(d.messages || []); setError(null); })
+      .then(d => {
+        const msgs = d.messages || [];
+        setMessages(msgs);
+        setError(null);
+        return markReadThroughMessages(msgs);
+      })
       .catch(e => setError(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
   };
   React.useEffect(() => { setLoading(true); load(); }, [projectId]);
-  React.useEffect(() => {
-    chatApi.count(projectId).then(({ count }) => localStorage.setItem(`chat_last_seen_${projectId}`, String(count || 0))).catch(() => {});
-  }, [projectId]);
   React.useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [messages]);
 
   const send = () => {
@@ -2727,8 +2870,10 @@ function ChatTab({ projectId }) {
       .then(msg => {
         setMessages(prev => [...prev, msg]);
         setInput('');
-        chatApi.count(projectId).then(({ count }) => localStorage.setItem(`chat_last_seen_${projectId}`, String(count || 0))).catch(() => {});
+        const ts = msg.created_at || new Date().toISOString();
+        return chatApi.markRead(projectId, ts);
       })
+      .then(() => { onUnreadChange?.(); })
       .catch(e => setError(e.response?.data?.error || e.message))
       .finally(() => setSending(false));
   };

@@ -108,6 +108,13 @@ export const projects = {
 export const chat = {
   list: (projectId) => api.get(`/api/projects/${projectId}/chat`).then(r => r.data),
   count: (projectId) => api.get(`/api/projects/${projectId}/chat/count`).then(r => r.data),
+  /** Server-side unread count (per user, survives reload/devices). */
+  unread: (projectId) => api.get(`/api/projects/${projectId}/chat/unread`).then(r => r.data),
+  /** Mark messages through this ISO time as read (omit = latest message or now). */
+  markRead: (projectId, readThrough) =>
+    api
+      .post(`/api/projects/${projectId}/chat/read`, readThrough ? { read_through: readThrough } : {})
+      .then(r => r.data),
   send: (projectId, body) => api.post(`/api/projects/${projectId}/chat`, { body }).then(r => r.data)
 };
 
