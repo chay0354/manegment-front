@@ -1,6 +1,7 @@
 /* Donezo-style: light grey background, green accent, rounded cards, sidebar + header */
 * { box-sizing: border-box; }
 :root {
+  --dashboard-max-width: 1220px;
   --bg: #f0f2f5;
   --bg-page: #e8eaed;
   --surface: #ffffff;
@@ -353,8 +354,10 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
 
 /* ---------- Dashboard (main / home) ---------- */
 .dashboard-page {
-  max-width: 1220px;
+  max-width: var(--dashboard-max-width);
   margin: 0 auto 8px auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .dashboard-hero {
@@ -650,6 +653,10 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
 
 .dashboard-projects-block {
   margin-bottom: 8px;
+  max-width: var(--dashboard-max-width);
+  margin-inline: auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 .dashboard-projects-intro {
   display: flex;
@@ -669,11 +676,25 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
 }
 .dashboard-projects-grid {
   gap: 18px;
+  max-width: var(--dashboard-max-width);
+  margin-inline: auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 .dashboard-toolbar-compact {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 16px;
+  margin: 0 auto 16px auto;
+  max-width: var(--dashboard-max-width);
+  width: 100%;
+  box-sizing: border-box;
+}
+/* New-project card on home dashboard: same width as recent panel / projects grid */
+.card.dashboard-inline-card {
+  max-width: var(--dashboard-max-width);
+  margin-inline: auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Legacy dashboard utilities (if referenced elsewhere) */

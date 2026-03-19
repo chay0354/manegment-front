@@ -352,7 +352,7 @@ function Home({ user, onLogout, dashboardMode = false }) {
             </div>
           )}
         {showNew && (
-          <div className="card">
+          <div className={`card${dashboardMode ? ' dashboard-inline-card' : ''}`}>
             <h3>{t.newProject}</h3>
             <div className="form-group"><label>{t.name}</label><input value={newName} onChange={e => setNewName(e.target.value)} placeholder={t.projectName} /></div>
             <div className="form-group"><label>{t.description}</label><textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder={t.optional} rows={2} /></div>
