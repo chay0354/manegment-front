@@ -2,7 +2,7 @@ import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
 // Backend URL from .env (VITE_MANEGER_API_URL) – used for all API and file uploads
-const API_BASE = (import.meta.env.VITE_MANEGER_API_URL || 'http://localhost:8001').replace(/\/$/, '');
+export const API_BASE = (import.meta.env.VITE_MANEGER_API_URL || 'http://localhost:8001').replace(/\/$/, '');
 
 export const api = axios.create({
   baseURL: API_BASE,
@@ -107,7 +107,18 @@ export const projects = {
 
 export const chat = {
   list: (projectId) => api.get(`/api/projects/${projectId}/chat`).then(r => r.data),
+  count: (projectId) => api.get(`/api/projects/${projectId}/chat/count`).then(r => r.data),
   send: (projectId, body) => api.post(`/api/projects/${projectId}/chat`, { body }).then(r => r.data)
+};
+
+/** Emails: Resend send + stored sent/received in project_emails. */
+export const emails = {
+  list: (projectId, params) => api.get(`/api/projects/${projectId}/emails`, { params }).then(r => r.data),
+  get: (projectId, emailId) => api.get(`/api/projects/${projectId}/emails/${emailId}`).then(r => r.data),
+  send: (projectId, body) =>
+    api.post(`/api/projects/${projectId}/emails/send`, body, { timeout: 180000 }).then(r => r.data),
+  importAttachment: (projectId, emailId, body) =>
+    api.post(`/api/projects/${projectId}/emails/${emailId}/import-attachment`, body, { timeout: 120000 }).then(r => r.data)
 };
 
 export const tasks = {
@@ -141,7 +152,8 @@ export const notes = {
 const FILE_INGEST_TIMEOUT = 180000; // 3 min – ingest (chunking + embeddings) can be slow
 
 export const projectFiles = {
-  list: (projectId) => api.get(`/api/projects/${projectId}/files`, { timeout: 60000 }).then(r => r.data),
+  list: (projectId, params) =>
+    api.get(`/api/projects/${projectId}/files`, { params: params || {}, timeout: 60000 }).then(r => r.data),
   upload: (projectId, file, folderDisplayName) => {
     const form = new FormData();
     form.append('file', file);

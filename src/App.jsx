@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { BrowserRouter, Routes, Route, Link, NavLink, Outlet, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
-import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, chat as chatApi, lab as labApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth, getNetworkErrorMessage } from './api';
+import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, chat as chatApi, emails as emailsApi, lab as labApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth, getNetworkErrorMessage } from './api';
 import t from './strings';
 
 /** Ensure we never pass an object to setError (React cannot render objects). */
@@ -14,30 +14,37 @@ function errorMessageFromResponse(err, fallback) {
   return typeof fallback === 'string' ? fallback : (err?.message || 'שגיאה');
 }
 
+const SidebarProjectContext = React.createContext([null, () => {}]);
+
 /** Sidebar only when a project is selected; otherwise full-width main */
 function AuthenticatedLayout({ user, onLogout }) {
   const { id } = useParams();
   const location = useLocation();
   const isProject = Boolean(id);
   const section = location.pathname.match(/\/project\/[^/]+\/section\/([^/]+)/)?.[1];
+  const [sidebarProjectName, setSidebarProjectName] = React.useState(null);
 
   return (
-    <div className={`app-shell ${isProject ? '' : 'app-shell-no-sidebar'}`} dir="rtl">
-      {isProject && (
-        <aside className="sidebar">
-          <div className="sidebar-brand">
-            <span className="sidebar-brand-icon">🧪</span>
-            <span className="sidebar-brand-text">{t.appTitle}</span>
-          </div>
-          <nav className="sidebar-nav">
-            <NavLink to="/" className={({ isActive }) => (isActive ? 'active' : '')} end>
-              📊 {t.navDashboard}
-            </NavLink>
+    <SidebarProjectContext.Provider value={[sidebarProjectName, setSidebarProjectName]}>
+      <div className={`app-shell ${isProject ? '' : 'app-shell-no-sidebar'}`} dir="rtl">
+        {isProject && (
+          <aside className="sidebar">
+            <div className="sidebar-brand">
+              <span className="sidebar-brand-icon">🧪</span>
+              <span className="sidebar-brand-text">{t.appTitle}</span>
+            </div>
+            {sidebarProjectName && (
+              <div className="sidebar-project-title-wrap">
+                <h1 className="sidebar-project-title">{sidebarProjectName}</h1>
+              </div>
+            )}
+            <nav className="sidebar-nav">
             <NavLink to="/projects" className={({ isActive }) => (isActive ? 'active' : '')}>
               📁 {t.navProjects}
             </NavLink>
             <Link to={`/project/${id}/section/lab`} className={section === 'lab' ? 'active' : ''}>🧪 {t.navExperiments}</Link>
             <Link to={`/project/${id}/section/rag`} className={section === 'rag' ? 'active' : ''}>📁 {t.navDocuments}</Link>
+            <Link to={`/project/${id}/section/emails`} className={section === 'emails' ? 'active' : ''}>✉️ {t.navEmails}</Link>
             <Link to={`/project/${id}/section/settings`} className={section === 'settings' ? 'active' : ''}>⚙️ {t.navSettings}</Link>
           </nav>
           <div className="sidebar-user">
@@ -52,10 +59,11 @@ function AuthenticatedLayout({ user, onLogout }) {
           </div>
         </aside>
       )}
-      <main className="main">
-        <Outlet />
-      </main>
-    </div>
+        <main className="main">
+          <Outlet />
+        </main>
+      </div>
+    </SidebarProjectContext.Provider>
   );
 }
 
@@ -201,20 +209,6 @@ function Home({ user, onLogout, dashboardMode = false }) {
                 <p className="page-subtitle">{t.dashboardSubtitle}</p>
               </header>
 
-              <section className="dashboard-quick-actions" aria-label={t.quickActions}>
-                <h2 className="dashboard-section-title">{t.quickActions}</h2>
-                <div className="dashboard-quick-actions-row">
-                  <button type="button" className="secondary" onClick={() => setShowNew(true)}>{t.quickActionNewProject}</button>
-                  {recentProjects[0] && (
-                    <>
-                      <button type="button" className="secondary" onClick={() => onProjectClick(recentProjects[0])}>{t.quickActionProjects}</button>
-                      <button type="button" className="secondary" onClick={() => navigate(`/project/${recentProjects[0].id}/section/lab`)}>{t.quickActionExperiments}</button>
-                      <button type="button" className="secondary" onClick={() => navigate(`/project/${recentProjects[0].id}/section/rag`)}>{t.quickActionDocuments}</button>
-                    </>
-                  )}
-                </div>
-              </section>
-
               <section className="dashboard-section" aria-labelledby="dashboard-lab-stats">
                 <h2 id="dashboard-lab-stats" className="dashboard-section-title">{t.labStatsTitle}</h2>
                 <div className="dashboard-summary-row">
@@ -347,9 +341,9 @@ function Home({ user, onLogout, dashboardMode = false }) {
   );
 }
 
-const TABS = ['overview', 'tasks', 'milestones', 'notes', 'lab', 'rag', 'chat', 'settings'];
-const TAB_LABELS = { overview: `📊 ${t.overview}`, tasks: `📋 ${t.tasks}`, milestones: `🎯 ${t.milestones}`, notes: `📝 ${t.notes}`, lab: `🧪 ${t.labTab}`, rag: `📁 ${t.docsManagementTab}`, chat: `💬 ${t.chat}`, settings: `⚙️ ${t.settings}` };
-const TAB_TITLES = { overview: t.overview, tasks: t.tasks, milestones: t.milestones, notes: t.notes, lab: t.labTab, rag: t.docsManagementTab, chat: t.chat, settings: t.settings };
+const TABS = ['overview', 'tasks', 'milestones', 'notes', 'lab', 'rag', 'emails', 'chat', 'settings'];
+const TAB_LABELS = { overview: `📊 ${t.overview}`, tasks: `📋 ${t.tasks}`, milestones: `🎯 ${t.milestones}`, notes: `📝 ${t.notes}`, lab: `🧪 ${t.labTab}`, rag: `📁 ${t.docsManagementTab}`, emails: `✉️ ${t.emailsTab}`, chat: `💬 ${t.chat}`, settings: `⚙️ ${t.settings}` };
+const TAB_TITLES = { overview: t.overview, tasks: t.tasks, milestones: t.milestones, notes: t.notes, lab: t.labTab, rag: t.docsManagementTab, emails: t.emailsTab, chat: t.chat, settings: t.settings };
 
 function ProjectView({ user, onLogout }) {
   const { id } = useParams();
@@ -359,6 +353,7 @@ function ProjectView({ user, onLogout }) {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
 
+  const [, setSidebarProjectName] = React.useContext(SidebarProjectContext);
   React.useEffect(() => {
     if (!id) return;
     Promise.all([projectsApi.get(id), projectsApi.getAccess(id)])
@@ -366,8 +361,16 @@ function ProjectView({ user, onLogout }) {
       .catch(e => setError(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
   }, [id]);
+  React.useEffect(() => {
+    setSidebarProjectName(null);
+    return () => setSidebarProjectName(null);
+  }, [id, setSidebarProjectName]);
+  React.useEffect(() => {
+    if (project?.name) setSidebarProjectName(project.name);
+  }, [project?.name, setSidebarProjectName]);
 
   const [overviewCounts, setOverviewCounts] = React.useState({ tasks: 0, tasksDone: 0, milestones: 0, milestonesDone: 0, notes: 0 });
+  const [chatUnreadCount, setChatUnreadCount] = React.useState(0);
   React.useEffect(() => {
     if (!id) return;
     Promise.all([tasksApi.list(id), milestonesApi.list(id), notesApi.list(id)])
@@ -387,12 +390,30 @@ function ProjectView({ user, onLogout }) {
   const fullScreenSection = (sectionId && TABS.includes(sectionId) ? sectionId : null) || fullScreenSectionState;
   const setFullScreenSection = (s) => {
     setFullScreenSectionState(s);
-    if (s) navigate(`/project/${id}/section/${s}`, { replace: true });
-    else navigate(`/project/${id}`, { replace: true });
+    if (s) {
+      navigate(`/project/${id}/section/${s}`, { replace: true });
+      if (s === 'chat') {
+        chatApi.count(id).then(({ count }) => {
+          localStorage.setItem(`chat_last_seen_${id}`, String(count || 0));
+          setChatUnreadCount(0);
+        }).catch(() => {});
+      }
+    } else {
+      navigate(`/project/${id}`, { replace: true });
+    }
   };
   React.useEffect(() => {
     if (sectionId && TABS.includes(sectionId)) setFullScreenSectionState(sectionId);
   }, [sectionId]);
+  React.useEffect(() => {
+    if (!id) return;
+    chatApi.count(id)
+      .then(({ count }) => {
+        const lastSeen = parseInt(localStorage.getItem(`chat_last_seen_${id}`) || '0', 10);
+        setChatUnreadCount(Math.max(0, (count || 0) - lastSeen));
+      })
+      .catch(() => {});
+  }, [id, fullScreenSection]);
 
   if (loading || !project) return <div className="main-content"><p className="loading">{t.loading}</p></div>;
   if (error) return <div className="main-content"><p className="error">{error}</p><button onClick={() => navigate('/')}>{t.back}</button></div>;
@@ -422,11 +443,6 @@ function ProjectView({ user, onLogout }) {
           </div>
         </header>
         <div className="main-content">
-          <div className="flex gap" style={{ alignItems: 'center', marginBottom: 8 }}>
-            <button className="secondary" onClick={() => navigate('/')}>← {t.back}</button>
-          </div>
-          <h1 className="page-title">{project.name}</h1>
-          {project.description ? <p className="page-subtitle">{project.description}</p> : <p className="page-subtitle">תכנן, עדכן והשלם משימות ואבני דרך.</p>}
           <div className="overview-cards-row">
             <div className="overview-card-item primary">
               <span className="card-icon">📋</span>
@@ -456,12 +472,18 @@ function ProjectView({ user, onLogout }) {
           <div className="widgets-grid">
             {TABS.map(tabId => (
               <button key={tabId} type="button" className="widget-card" onClick={() => setFullScreenSection(tabId)}>
-                <span className="widget-card-icon">{tabId === 'overview' ? '📊' : tabId === 'tasks' ? '📋' : tabId === 'milestones' ? '🎯' : tabId === 'notes' ? '📝' : tabId === 'lab' ? '🧪' : tabId === 'rag' ? '📁' : tabId === 'chat' ? '💬' : '⚙️'}</span>
+                <span className="widget-card-icon-wrapper">
+                  <span className="widget-card-icon">{tabId === 'overview' ? '📊' : tabId === 'tasks' ? '📋' : tabId === 'milestones' ? '🎯' : tabId === 'notes' ? '📝' : tabId === 'lab' ? '🧪' : tabId === 'rag' ? '📁' : tabId === 'emails' ? '✉️' : tabId === 'chat' ? '💬' : '⚙️'}</span>
+                  {tabId === 'chat' && chatUnreadCount > 0 && (
+                    <span className="widget-card-badge" aria-label={t.chatUnreadCount(chatUnreadCount)}>{chatUnreadCount > 99 ? '99+' : chatUnreadCount}</span>
+                  )}
+                </span>
                 <span className="widget-card-title">{TAB_TITLES[tabId]}</span>
                 {tabId === 'overview' && <span className="widget-card-meta">{overviewCounts.tasks} {t.tasks}, {overviewCounts.milestones} {t.milestones}</span>}
                 {tabId === 'tasks' && <span className="widget-card-meta">{overviewCounts.tasks} {t.tasks}</span>}
                 {tabId === 'milestones' && <span className="widget-card-meta">{overviewCounts.milestones} {t.milestones}</span>}
                 {tabId === 'notes' && <span className="widget-card-meta">{overviewCounts.notes} {t.notes}</span>}
+                {tabId === 'chat' && chatUnreadCount > 0 && <span className="widget-card-meta">{t.chatNewMessages(chatUnreadCount)}</span>}
               </button>
             ))}
           </div>
@@ -479,6 +501,7 @@ function ProjectView({ user, onLogout }) {
                   {fullScreenSection === 'notes' && <NotesTab projectId={id} />}
                   {fullScreenSection === 'lab' && <LabTab projectId={id} />}
                   {fullScreenSection === 'rag' && <RagTab projectId={id} />}
+                  {fullScreenSection === 'emails' && <EmailsTab projectId={id} />}
                   {fullScreenSection === 'chat' && <ChatTab projectId={id} />}
                   {fullScreenSection === 'settings' && <SettingsTab projectId={id} project={project} setProject={setProject} navigate={navigate} projectRole={projectRole} user={user} />}
                 </div>
@@ -530,8 +553,11 @@ function Overview({ projectId, project }) {
 
   const taskDone = tasks.filter(x => x.status === 'done').length;
   const progress = tasks.length ? Math.round((taskDone / tasks.length) * 100) : 0;
-  const statusBreakdown = { todo: 0, in_progress: 0, in_review: 0, done: 0 };
-  tasks.forEach(t => { if (statusBreakdown[t.status] !== undefined) statusBreakdown[t.status]++; });
+  const statusBreakdown = { todo: 0, in_progress: 0, done: 0 };
+  tasks.forEach(t => {
+    const s = t.status === 'in_review' ? 'in_progress' : t.status;
+    if (statusBreakdown[s] !== undefined) statusBreakdown[s]++;
+  });
   const maxStatus = Math.max(1, ...Object.values(statusBreakdown));
   const overdueTasks = tasks.filter(t => t.status !== 'done' && isOverdueDate(t.due_date));
   const milestonesDone = milestones.filter(m => m.completed_at).length;
@@ -591,7 +617,7 @@ function Overview({ projectId, project }) {
           <div className="overview-section">
             <label>{t.taskStatusBreakdown}</label>
             <div className="overview-bar-chart">
-              {['todo', 'in_progress', 'in_review', 'done'].map(col => (
+              {TASK_COLUMNS.map(col => (
                 <div key={col} className="overview-bar-row">
                   <span className="overview-bar-legend">{TASK_COLUMN_LABELS[col]}</span>
                   <div className="overview-bar-track">
@@ -657,8 +683,9 @@ function isOverdue(dateStr) {
   return dateStr < new Date().toISOString().slice(0, 10);
 }
 
-const TASK_COLUMNS = ['todo', 'in_progress', 'in_review', 'done'];
-const TASK_COLUMN_LABELS = { todo: t.todo, in_progress: t.inProgress, in_review: t.inReview, done: t.done };
+// Only three statuses: לביצוע, בביצוע, הושלם (בדיקה/בבדיקה removed)
+const TASK_COLUMNS = ['todo', 'in_progress', 'done'];
+const TASK_COLUMN_LABELS = { todo: t.todo, in_progress: t.inProgress, done: t.done };
 
 function TasksTab({ projectId }) {
   const [list, setList] = React.useState([]);
@@ -695,7 +722,10 @@ function TasksTab({ projectId }) {
 
   const priorityLabel = (p) => ({ low: t.low, medium: t.medium, high: t.high }[p] || p);
   const filteredList = !search.trim() ? list : list.filter(task => (task.title || '').toLowerCase().includes(search.toLowerCase()));
-  const byColumn = TASK_COLUMNS.reduce((acc, col) => { acc[col] = filteredList.filter(t => t.status === col); return acc; }, {});
+  const byColumn = TASK_COLUMNS.reduce((acc, col) => {
+    acc[col] = filteredList.filter(t => t.status === col || (col === 'in_progress' && t.status === 'in_review'));
+    return acc;
+  }, {});
 
   return (
     <div className="card tab-card tasks-kanban">
@@ -738,7 +768,7 @@ function TasksTab({ projectId }) {
                       {task.due_date && <span className="kanban-card-meta">{task.due_date}{task.status !== 'done' && isOverdue(task.due_date) ? ' · ' + t.overdue : ''}</span>}
                     </div>
                     <div className="kanban-card-actions">
-                      <select value={task.status} onChange={e => updateStatus(task.id, e.target.value)} className="kanban-move-select" aria-label={t.tasks}>
+                      <select value={task.status === 'in_review' ? 'in_progress' : task.status} onChange={e => updateStatus(task.id, e.target.value)} className="kanban-move-select" aria-label={t.tasks}>
                         {TASK_COLUMNS.map(c => <option key={c} value={c}>{TASK_COLUMN_LABELS[c]}</option>)}
                       </select>
                       <button type="button" className={`secondary kanban-delete ${removingId === task.id ? 'btn-loading' : ''}`} onClick={() => remove(task.id)} disabled={removingId === task.id}>{removingId === task.id ? t.loading : t.delete}</button>
@@ -1164,7 +1194,7 @@ function LabTab({ projectId }) {
           <input
             ref={labFileInputRef}
             type="file"
-            accept=".txt,.csv,.json,.xlsx,.xls"
+            accept=".pdf,.txt,.csv,.json,.xlsx,.xls"
             onChange={handleLabFileChange}
             className="rag-file-input-hidden"
             id="lab-experiment-file"
@@ -2195,6 +2225,479 @@ function RagTab({ projectId }) {
   );
 }
 
+function stripHtmlPreview(html) {
+  if (!html) return '';
+  return String(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function fileToBase64Part(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const s = String(r.result || '');
+      const i = s.indexOf(',');
+      resolve(i >= 0 ? s.slice(i + 1) : s);
+    };
+    r.onerror = () => reject(new Error('read failed'));
+    r.readAsDataURL(file);
+  });
+}
+
+function emailAttachmentsList(row) {
+  if (!row || row.attachments == null) return [];
+  const a = row.attachments;
+  if (Array.isArray(a)) return a;
+  if (typeof a === 'string') {
+    try {
+      const p = JSON.parse(a);
+      return Array.isArray(p) ? p : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function EmailsTab({ projectId }) {
+  const navigate = useNavigate();
+  const [list, setList] = React.useState([]);
+  const [listLoading, setListLoading] = React.useState(true);
+  const [listError, setListError] = React.useState(null);
+  const [selectedId, setSelectedId] = React.useState(null);
+  const [selected, setSelected] = React.useState(null);
+
+  const [showCompose, setShowCompose] = React.useState(false);
+  const [to, setTo] = React.useState('');
+  const [subject, setSubject] = React.useState('');
+  const [body, setBody] = React.useState('');
+  const [sending, setSending] = React.useState(false);
+  const [formError, setFormError] = React.useState(null);
+  const [formSuccess, setFormSuccess] = React.useState(false);
+  const [importingKey, setImportingKey] = React.useState(null);
+  const [importNotice, setImportNotice] = React.useState(null);
+  const [composeFilesList, setComposeFilesList] = React.useState([]);
+  const [composeFilesLoading, setComposeFilesLoading] = React.useState(false);
+  const [composeAttachIds, setComposeAttachIds] = React.useState([]);
+  const [composeLocalFiles, setComposeLocalFiles] = React.useState([]);
+  const [showProjectAttachModal, setShowProjectAttachModal] = React.useState(false);
+  const pcAttachInputRef = React.useRef(null);
+  const composeAttachIdsRef = React.useRef([]);
+  const composeLocalFilesLenRef = React.useRef(0);
+  React.useEffect(() => {
+    composeAttachIdsRef.current = composeAttachIds;
+  }, [composeAttachIds]);
+  React.useEffect(() => {
+    composeLocalFilesLenRef.current = composeLocalFiles.length;
+  }, [composeLocalFiles.length]);
+
+  const fetchEmails = React.useCallback(() => {
+    setListLoading(true);
+    setListError(null);
+    emailsApi.list(projectId, { direction: 'sent', limit: 80, offset: 0 })
+      .then(d => {
+        const emails = d.emails || [];
+        setList(emails);
+        setSelectedId(cur => (cur && !emails.some(e => e.id === cur) ? null : cur));
+      })
+      .catch(e => setListError(errorMessageFromResponse(e, t.emailLoadError)))
+      .finally(() => setListLoading(false));
+  }, [projectId]);
+
+  React.useEffect(() => { fetchEmails(); }, [fetchEmails]);
+
+  React.useEffect(() => {
+    if (!selectedId) {
+      setSelected(null);
+      return;
+    }
+    const row = list.find(e => e.id === selectedId);
+    if (row) setSelected(row);
+    else setSelected(null);
+  }, [list, selectedId]);
+
+  React.useEffect(() => {
+    if (!showCompose) return undefined;
+    let cancelled = false;
+    setComposeFilesLoading(true);
+    projectFilesApi
+      .list(projectId, { limit: 100, offset: 0 })
+      .then(d => {
+        if (!cancelled) setComposeFilesList(d.files || []);
+      })
+      .catch(() => {
+        if (!cancelled) setComposeFilesList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setComposeFilesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [showCompose, projectId]);
+
+  const send = async () => {
+    const addr = (to || '').trim();
+    const sub = (subject || '').trim();
+    const text = (body || '').trim();
+    if (!addr || !sub || !text || sending) return;
+    if (composeAttachIds.length + composeLocalFiles.length > 15) {
+      setFormError(t.emailAttachTooMany);
+      return;
+    }
+    setSending(true);
+    setFormError(null);
+    setFormSuccess(false);
+    let inline_attachments;
+    try {
+      inline_attachments = [];
+      for (const f of composeLocalFiles) {
+        const content_base64 = await fileToBase64Part(f);
+        inline_attachments.push({ filename: f.name, content_base64 });
+      }
+    } catch {
+      setFormError(t.emailAttachReadError);
+      setSending(false);
+      return;
+    }
+    const payload = { to: addr, subject: sub, text };
+    if (composeAttachIds.length > 0) payload.attachment_file_ids = composeAttachIds;
+    if (inline_attachments.length > 0) payload.inline_attachments = inline_attachments;
+    emailsApi
+      .send(projectId, payload)
+      .then(() => {
+        setFormSuccess(true);
+        setBody('');
+        setComposeAttachIds([]);
+        setComposeLocalFiles([]);
+        setComposeFilesList([]);
+        setShowProjectAttachModal(false);
+        setShowCompose(false);
+        setSelectedId(null);
+        fetchEmails();
+      })
+      .catch(e => setFormError(errorMessageFromResponse(e, t.emailConfigMissing)))
+      .finally(() => setSending(false));
+  };
+
+  const importAttachment = (storedEmailId, attachmentId, destination) => {
+    if (!attachmentId || importingKey) return;
+    const key = `${attachmentId}:${destination}`;
+    setImportingKey(key);
+    setImportNotice(null);
+    emailsApi.importAttachment(projectId, storedEmailId, { attachment_id: attachmentId, destination })
+      .then(() => {
+        setImportNotice({ ok: true, text: t.emailImportDone });
+        if (destination === 'lab') navigate(`/project/${projectId}/section/lab`);
+        else navigate(`/project/${projectId}/section/rag`);
+      })
+      .catch(e => setImportNotice({ ok: false, text: errorMessageFromResponse(e, '') }))
+      .finally(() => setImportingKey(null));
+  };
+
+  return (
+    <div className="card tab-card emails-tab">
+      <div className="emails-toolbar">
+        <div className="emails-toolbar-left">
+          <span className="emails-toolbar-label">{t.emailFolderSent}</span>
+          {!listLoading && list.length > 0 && (
+            <span className="emails-toolbar-count" aria-live="polite">{list.length}</span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setShowCompose(v => {
+              const next = !v;
+              if (!next) {
+                setComposeAttachIds([]);
+                setComposeLocalFiles([]);
+                setComposeFilesList([]);
+                setShowProjectAttachModal(false);
+              }
+              return next;
+            });
+            setFormError(null);
+            setFormSuccess(false);
+          }}
+        >
+          {showCompose ? t.cancel : t.emailCompose}
+        </button>
+      </div>
+
+      {showCompose && (
+        <div className="emails-compose-panel">
+          {formError && <p className="error" style={{ marginBottom: 8 }}>{formError}</p>}
+          {formSuccess && <p style={{ marginBottom: 8, color: 'var(--success)', fontWeight: 600 }}>{t.emailSent}</p>}
+          <div className="form-group">
+            <label htmlFor="email-to">{t.emailTo}</label>
+            <input id="email-to" type="email" dir="ltr" value={to} onChange={e => setTo(e.target.value)} placeholder="name@example.com" />
+          </div>
+          <div className="form-group">
+            <label htmlFor="email-subject">{t.emailSubject}</label>
+            <input id="email-subject" type="text" value={subject} onChange={e => setSubject(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label htmlFor="email-body">{t.emailBody}</label>
+            <textarea id="email-body" rows={8} value={body} onChange={e => setBody(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <span className="emails-compose-attach-label">{t.emailAttachmentsComposeLabel}</span>
+            <div className="emails-compose-attach-buttons">
+              <button
+                type="button"
+                className="secondary"
+                disabled={sending}
+                onClick={() => setShowProjectAttachModal(true)}
+              >
+                {t.emailAttachFromProjectBtn}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={sending}
+                onClick={() => pcAttachInputRef.current?.click()}
+              >
+                {t.emailAttachFromPcBtn}
+              </button>
+              <input
+                ref={pcAttachInputRef}
+                type="file"
+                multiple
+                className="emails-file-input-hidden"
+                aria-hidden
+                tabIndex={-1}
+                onChange={e => {
+                  const picked = Array.from(e.target.files || []);
+                  const inputEl = e.target;
+                  setComposeLocalFiles(prev => {
+                    const additions = [];
+                    const nProj = composeAttachIdsRef.current.length;
+                    for (const file of picked) {
+                      if (nProj + prev.length + additions.length >= 15) break;
+                      if (prev.length + additions.length >= 8) break;
+                      additions.push(file);
+                    }
+                    return [...prev, ...additions];
+                  });
+                  inputEl.value = '';
+                }}
+              />
+            </div>
+            {(composeAttachIds.length > 0 || composeLocalFiles.length > 0) && (
+              <ul className="emails-compose-attach-chips">
+                {composeAttachIds.map(id => {
+                  const f = composeFilesList.find(x => x.id === id);
+                  return (
+                    <li key={`p-${id}`} className="emails-compose-chip">
+                      <span dir="ltr" className="emails-compose-chip-text">{f?.original_name || id}</span>
+                      <button
+                        type="button"
+                        className="emails-compose-chip-remove"
+                        aria-label={t.remove}
+                        disabled={sending}
+                        onClick={() => setComposeAttachIds(ids => ids.filter(i => i !== id))}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  );
+                })}
+                {composeLocalFiles.map((f, i) => (
+                  <li key={`l-${f.name}-${f.size}-${f.lastModified}-${i}`} className="emails-compose-chip">
+                    <span dir="ltr" className="emails-compose-chip-text">{f.name}</span>
+                    <button
+                      type="button"
+                      className="emails-compose-chip-remove"
+                      aria-label={t.remove}
+                      disabled={sending}
+                      onClick={() => setComposeLocalFiles(prev => prev.filter((_, j) => j !== i))}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <button type="button" onClick={send} disabled={sending || !to.trim() || !subject.trim() || !body.trim()} className={sending ? 'btn-loading' : ''}>{sending ? t.loading : t.emailSend}</button>
+        </div>
+      )}
+
+      {showCompose && showProjectAttachModal && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowProjectAttachModal(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.emailAttachModalTitle}
+        >
+          <div className="modal card emails-attach-modal" onClick={e => e.stopPropagation()}>
+            <h4 className="emails-attach-modal-title">{t.emailAttachModalTitle}</h4>
+            {composeFilesLoading && <p className="loading">{t.loading}</p>}
+            {!composeFilesLoading && composeFilesList.length === 0 && (
+              <p className="loading">{t.emailAttachNoFiles}</p>
+            )}
+            {!composeFilesLoading && composeFilesList.length > 0 && (
+              <ul className="emails-compose-attach-list emails-attach-modal-list modal-scroll">
+                {composeFilesList.map(f => {
+                  const canAttach = !!(f.storage_path && String(f.storage_path).trim());
+                  const checked = composeAttachIds.includes(f.id);
+                  return (
+                    <li key={f.id}>
+                      <label className={`emails-compose-attach-item${!canAttach ? ' emails-compose-attach-item-disabled' : ''}`}>
+                        <input
+                          type="checkbox"
+                          disabled={!canAttach || sending}
+                          checked={canAttach && checked}
+                          onChange={e => {
+                            setComposeAttachIds(ids => {
+                              if (e.target.checked) {
+                                if (ids.length + composeLocalFilesLenRef.current >= 15) return ids;
+                                if (ids.includes(f.id)) return ids;
+                                return [...ids, f.id];
+                              }
+                              return ids.filter(x => x !== f.id);
+                            });
+                          }}
+                        />
+                        <span dir="auto" className="emails-compose-attach-name">{f.original_name || f.id}</span>
+                        {!canAttach && (
+                          <span className="emails-compose-attach-hint" title={t.emailAttachNoStorage}>
+                            ({t.emailAttachNoStorageShort})
+                          </span>
+                        )}
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <div className="emails-attach-modal-footer">
+              <button type="button" className="secondary" onClick={() => setShowProjectAttachModal(false)}>
+                {t.emailAttachModalClose}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {listError && <p className="error" style={{ marginBottom: 8 }}>{listError}</p>}
+
+      <div className={`emails-split ${selectedId ? 'emails-split--with-detail' : 'emails-split--list-only'}`}>
+        <div className="emails-list-pane">
+          {listLoading && <p className="loading">{t.loading}</p>}
+          {!listLoading && list.length === 0 && <p className="loading">{t.emailEmptyList}</p>}
+          {!listLoading && list.map(item => {
+            const preview = item.body_text || stripHtmlPreview(item.body_html) || '—';
+            const short = preview.length > 120 ? `${preview.slice(0, 120)}…` : preview;
+            const when = item.created_at ? new Date(item.created_at).toLocaleString('he-IL') : '';
+            const fromTo = item.direction === 'sent'
+              ? `${t.emailToLabel}: ${Array.isArray(item.to_emails) ? item.to_emails.join(', ') : ''}`
+              : `${t.emailFrom}: ${item.from_email || '—'}`;
+            return (
+              <button
+                type="button"
+                key={item.id}
+                className={`emails-list-item ${selectedId === item.id ? 'active' : ''}`}
+                onClick={() => {
+                  if (selectedId === item.id) {
+                    setSelectedId(null);
+                    setSelected(null);
+                  } else {
+                    setSelectedId(item.id);
+                    setSelected(item);
+                  }
+                }}
+              >
+                <span className="emails-list-subject">{item.subject || '(ללא נושא)'}</span>
+                <span className="emails-list-meta">{fromTo}</span>
+                <span className="emails-list-preview">{short}</span>
+                <span className="emails-list-date">{when}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="emails-detail-pane">
+          {!selectedId && <p className="loading emails-detail-empty">{t.emailNoSelection}</p>}
+          {selectedId && selected && (
+            <div className="emails-detail-content">
+              <h4 className="emails-detail-subject">{selected.subject || '(ללא נושא)'}</h4>
+              <div className="emails-detail-headers">
+                <div><strong>{t.emailFrom}:</strong> <span dir="ltr">{selected.from_email}</span></div>
+                <div><strong>{t.emailToLabel}:</strong> <span dir="ltr">{Array.isArray(selected.to_emails) ? selected.to_emails.join(', ') : JSON.stringify(selected.to_emails)}</span></div>
+                <div><strong>{t.emailDate}:</strong> {selected.created_at ? new Date(selected.created_at).toLocaleString('he-IL') : ''}</div>
+                {selected.direction === 'sent' && selected.sent_by_username && (
+                  <div><strong>{t.emailSentBy}:</strong> {selected.sent_by_username}</div>
+                )}
+              </div>
+              <div className="emails-detail-body">
+                {selected.body_text ? (
+                  <pre className="emails-body-text">{selected.body_text}</pre>
+                ) : selected.body_html ? (
+                  <iframe title="email-html" className="emails-body-html-frame" sandbox="" srcDoc={selected.body_html} />
+                ) : (
+                  <p className="loading">—</p>
+                )}
+              </div>
+              {selected.direction === 'sent' && emailAttachmentsList(selected).length > 0 && (
+                <div className="emails-attachments">
+                  <h5>{t.emailAttachments}</h5>
+                  {emailAttachmentsList(selected).map((att, idx) => {
+                    const key = att.project_file_id || `${att.filename || 'file'}-${idx}`;
+                    return (
+                      <div key={key} className="emails-attachment-row emails-attachment-row-readonly">
+                        <span className="emails-attachment-name" dir="ltr">{att.filename || att.project_file_id || 'file'}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {selected.direction === 'received' && (
+                <div className="emails-attachments">
+                  <h5>{t.emailAttachments}</h5>
+                  {importNotice && (
+                    <p className={importNotice.ok ? 'loading' : 'error'} style={{ marginBottom: 8 }}>{importNotice.text}</p>
+                  )}
+                  {emailAttachmentsList(selected).length === 0 && (
+                    <p className="loading">{t.emailNoAttachments}</p>
+                  )}
+                  {emailAttachmentsList(selected).map(att => {
+                    const aid = att.id || att.attachment_id;
+                    return (
+                      <div key={aid || att.filename} className="emails-attachment-row">
+                        <span className="emails-attachment-name" dir="ltr">
+                          {att.filename || aid || 'file'}
+                          {att.content_type ? ` · ${att.content_type}` : ''}
+                        </span>
+                        <div className="emails-attachment-actions">
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={!aid || !!importingKey}
+                            onClick={() => importAttachment(selected.id, aid, 'project_files')}
+                          >
+                            {importingKey === `${aid}:project_files` ? t.emailImporting : t.emailImportToDocuments}
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={!aid || !!importingKey}
+                            onClick={() => importAttachment(selected.id, aid, 'lab')}
+                          >
+                            {importingKey === `${aid}:lab` ? t.emailImporting : t.emailImportToLab}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChatTab({ projectId }) {
   const [messages, setMessages] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -2210,6 +2713,9 @@ function ChatTab({ projectId }) {
       .finally(() => setLoading(false));
   };
   React.useEffect(() => { setLoading(true); load(); }, [projectId]);
+  React.useEffect(() => {
+    chatApi.count(projectId).then(({ count }) => localStorage.setItem(`chat_last_seen_${projectId}`, String(count || 0))).catch(() => {});
+  }, [projectId]);
   React.useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [messages]);
 
   const send = () => {
@@ -2218,7 +2724,11 @@ function ChatTab({ projectId }) {
     setSending(true);
     setError(null);
     chatApi.send(projectId, text)
-      .then(msg => { setMessages(prev => [...prev, msg]); setInput(''); })
+      .then(msg => {
+        setMessages(prev => [...prev, msg]);
+        setInput('');
+        chatApi.count(projectId).then(({ count }) => localStorage.setItem(`chat_last_seen_${projectId}`, String(count || 0))).catch(() => {});
+      })
       .catch(e => setError(e.response?.data?.error || e.message))
       .finally(() => setSending(false));
   };
