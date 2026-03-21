@@ -2367,6 +2367,8 @@ function EmailsTab({ projectId }) {
   const [listError, setListError] = React.useState(null);
   const [selectedId, setSelectedId] = React.useState(null);
   const [selected, setSelected] = React.useState(null);
+  /** 'sent' | 'received' — matches API `direction` (backend + Resend inbound already store received). */
+  const [mailFolder, setMailFolder] = React.useState('sent');
 
   const [showCompose, setShowCompose] = React.useState(false);
   const [to, setTo] = React.useState('');
@@ -2405,7 +2407,7 @@ function EmailsTab({ projectId }) {
   const fetchEmails = React.useCallback(() => {
     setListLoading(true);
     setListError(null);
-    emailsApi.list(projectId, { direction: 'sent', limit: 80, offset: 0 })
+    emailsApi.list(projectId, { direction: mailFolder, limit: 80, offset: 0 })
       .then(d => {
         const emails = d.emails || [];
         setList(emails);
@@ -2413,7 +2415,7 @@ function EmailsTab({ projectId }) {
       })
       .catch(e => setListError(errorMessageFromResponse(e, t.emailLoadError)))
       .finally(() => setListLoading(false));
-  }, [projectId]);
+  }, [projectId, mailFolder]);
 
   React.useEffect(() => { fetchEmails(); }, [fetchEmails]);
 
@@ -2499,6 +2501,7 @@ function EmailsTab({ projectId }) {
         setShowProjectAttachModal(false);
         setShowCompose(false);
         setSelectedId(null);
+        setMailFolder('sent');
         fetchEmails();
       })
       .catch(e => setFormError(errorMessageFromResponse(e, t.emailConfigMissing)))
@@ -2524,7 +2527,39 @@ function EmailsTab({ projectId }) {
     <div className="card tab-card emails-tab">
       <div className="emails-toolbar">
         <div className="emails-toolbar-left">
-          <span className="emails-toolbar-label">{t.emailFolderSent}</span>
+          <span className="emails-toolbar-folders-label" id="emails-folder-label">{t.emailFoldersLabel}</span>
+          <div className="emails-folder-switch" role="tablist" aria-labelledby="emails-folder-label">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mailFolder === 'sent'}
+              className={`emails-folder-btn ${mailFolder === 'sent' ? 'active' : ''}`}
+              onClick={() => {
+                if (mailFolder === 'sent') return;
+                setMailFolder('sent');
+                setSelectedId(null);
+                setSelected(null);
+                setImportNotice(null);
+              }}
+            >
+              {t.emailFolderSent}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mailFolder === 'received'}
+              className={`emails-folder-btn ${mailFolder === 'received' ? 'active' : ''}`}
+              onClick={() => {
+                if (mailFolder === 'received') return;
+                setMailFolder('received');
+                setSelectedId(null);
+                setSelected(null);
+                setImportNotice(null);
+              }}
+            >
+              {t.emailFolderReceived}
+            </button>
+          </div>
           {!listLoading && list.length > 0 && (
             <span className="emails-toolbar-count" aria-live="polite">{list.length}</span>
           )}
@@ -2709,7 +2744,14 @@ function EmailsTab({ projectId }) {
       <div className={`emails-split ${selectedId ? 'emails-split--with-detail' : 'emails-split--list-only'}`}>
         <div className="emails-list-pane">
           {listLoading && <p className="loading">{t.loading}</p>}
-          {!listLoading && list.length === 0 && <p className="loading">{t.emailEmptyList}</p>}
+          {!listLoading && list.length === 0 && (
+            <div className="emails-empty-folder">
+              <p className="loading">{t.emailEmptyList}</p>
+              {mailFolder === 'received' && (
+                <p className="emails-empty-folder-hint muted">{t.emailReceivedSetupHint}</p>
+              )}
+            </div>
+          )}
           {!listLoading && list.map(item => {
             const preview = item.body_text || stripHtmlPreview(item.body_html) || '—';
             const short = preview.length > 120 ? `${preview.slice(0, 120)}…` : preview;

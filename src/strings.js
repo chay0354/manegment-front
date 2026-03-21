@@ -161,6 +161,12 @@ export default {
   emailSent: 'המייל נשלח ונשמר בתיבה.',
   emailConfigMissing: 'שליחת מייל לא זמינה – לא הוגדר מפתח Resend בשרת.',
   emailFolderSent: 'נשלחו',
+  emailFolderReceived: 'התקבלו',
+  emailEmptyInbox: 'אין מיילים נכנסים עדיין. מיילים נשמרים כאשר מגדירים ב-Resend Inbound את כתובת ה-webhook של הפרויקט (או מזהה הפרויקט בנמען).',
+  emailFolderReceived: 'התקבלו',
+  emailFoldersLabel: 'תיקייה',
+  emailReceivedSetupHint:
+    'אין מיילים נכנסים עדיין. כדי לקבל מיילים לפרויקט: הגדר ב־Resend Inbound Webhook את כתובת ה־API של השרת (כולל מזהה הפרויקט בכתובת היעד), כפי שמופיע ב־.env.example של maneger-back.',
   emailCompose: 'הודעה חדשה',
   emailNoSelection: 'בחר מייל מהרשימה',
   emailEmptyList: 'אין מיילים בתיקייה זו.',
