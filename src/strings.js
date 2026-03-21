@@ -128,7 +128,26 @@ export default {
   docsUploadHint: 'PDF, DOCX, TXT, XLSX. הקבצים נשלחים למטריה לעיבוד וניתן לשאול עליהם שאלות.',
   docsListSection: 'הקבצים בפרויקט',
   docsAskSection: 'שאל שאלה על המסמכים',
-  docsAskHint: 'בחר קובץ (או כל הקבצים) ושאל שאלה – התשובה מבוססת על תוכן הקבצים במטריה.',
+
+  ragGptOpenAiUnavailable: 'OpenAI לא מוגדר בשרת (הגדר OPENAI_API_KEY ב־maneger-back).',
+  gptRagRefreshStatus: 'רענון סטטוס',
+  ragGptSyncDone: 'סנכרון הושלם.',
+  gptRagResyncShort: 'סנכרון מחדש',
+  gptRagIndicatorLoading: 'בודק חיבור OpenAI…',
+  gptRagIndicatorSyncing: 'מסנכרן אל OpenAI… (עשוי לקחת מספר דקות)',
+  gptRagIndicatorPending: 'ממתין לסנכרון…',
+  gptRagIndicatorSynced: 'מסונכרן',
+  gptRagIndicatorNoFiles: 'אין קבצים בפרויקט.',
+  gptRagIndicatorNoStoragePath:
+    'חלק מהמסמכים נרשמו בלי קובץ ב־Storage (אין נתיב אחסון) — סנכרון OpenAI לא יעבוד עליהם. אפשר ללחוץ «שחזור מהאינדוקס» אם המסמכים כבר אונדקסו ב־RAG, או להעלות/למשוך שוב מהמקור.',
+  gptRagRepairStorageFromRag: 'שחזור נתיב אחסון מהאינדוקס',
+  gptRagRepairStorageRunning: 'משחזר…',
+  gptRagIndicatorNoSupportedFiles:
+    'אין כרגע מסמכים בפורמט שניתן לחפש ב־OpenAI (למשל PDF, DOCX, TXT, XLSX, PPTX). קבצים אחרים בפרויקט לא נסרקים לשאלות — הוסף מסמך מהסוגים האלה.',
+  gptRagIndicatorSyncFailed: 'הסנכרון ל־OpenAI נכשל. בדוק את ההודעה למעלה או נסה שוב.',
+  gptRagRetrySync: 'נסה שוב',
+  /** Tooltip on disabled «הרץ» when OpenAI selected but no vector store */
+  ragGptNoVectorTitle: 'ממתין לסנכרון או אין מסמכים בפורמט נתמך ל־OpenAI',
 
   ragTitle: 'שאלות (מטריה)',
   matriyaConnected: 'חיבור למטריה פעיל',

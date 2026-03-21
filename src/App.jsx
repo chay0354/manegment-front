@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { BrowserRouter, Routes, Route, Link, NavLink, Outlet, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
-import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, chat as chatApi, emails as emailsApi, lab as labApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth, getNetworkErrorMessage } from './api';
+import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, gptRag as gptRagApi, chat as chatApi, emails as emailsApi, lab as labApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth, getNetworkErrorMessage } from './api';
 import t from './strings';
 
 /** Ensure we never pass an object to setError (React cannot render objects). */
@@ -1558,6 +1558,17 @@ function LabTab({ projectId }) {
   );
 }
 
+/** Matches maneger-back lib/gptRagSync.js (OpenAI vector upload). */
+const GPT_OPENAI_SYNC_FILE_RE = /\.(pdf|docx|doc|txt|xlsx|xls|pptx|csv|json|md|html|htm)$/i;
+
+function isGptOpenAiEligibleProjectFile(f) {
+  if (!f || !f.storage_path || !String(f.storage_path).trim()) return false;
+  const orig = String(f.original_name || '').trim();
+  const fromPath = String(f.storage_path).split('/').filter(Boolean).pop() || '';
+  const base = orig || fromPath;
+  return GPT_OPENAI_SYNC_FILE_RE.test(base);
+}
+
 function RagTab({ projectId }) {
   const [query, setQuery] = React.useState('');
   const [result, setResult] = React.useState(null);
@@ -1568,7 +1579,6 @@ function RagTab({ projectId }) {
   const [filesLoading, setFilesLoading] = React.useState(true);
   const [uploading, setUploading] = React.useState(false);
   const [uploadProgress, setUploadProgress] = React.useState({ current: 0, total: 0 });
-  const [selectedFilename, setSelectedFilename] = React.useState('');
   const [actionMessage, setActionMessage] = React.useState(null);
   const [removingFileId, setRemovingFileId] = React.useState(null);
   const [showSharepointPicker, setShowSharepointPicker] = React.useState(false);
@@ -1593,12 +1603,20 @@ function RagTab({ projectId }) {
   const [showUploadTypeChoice, setShowUploadTypeChoice] = React.useState(false);
   const ragFileInputRef = React.useRef(null);
   const ragFolderInputRef = React.useRef(null);
+  /** Document Q&A uses OpenAI File search only (Matriya RAG selector hidden for now). */
+  const [gptRagStatus, setGptRagStatus] = React.useState(null);
+  const [gptRagSyncing, setGptRagSyncing] = React.useState(false);
+  /** Prevents duplicate auto-sync for the same project until user leaves OpenAI mode or changes project. */
+  const gptAutoSyncForProjectRef = React.useRef('');
+  const gptSyncLockRef = React.useRef(false);
+  const [gptSyncHadError, setGptSyncHadError] = React.useState(false);
+  const [storageRepairLoading, setStorageRepairLoading] = React.useState(false);
 
-  const loadFiles = () => {
+  const loadFiles = React.useCallback(() => {
     if (!projectId) return;
     projectFilesApi.list(projectId).then(d => {
       const files = d.files || [];
-      const filtered = files.filter(f => f.project_id == null || f.project_id === projectId);
+      const filtered = files.filter(f => f.project_id == null || String(f.project_id) === String(projectId));
       setProjectFiles(filtered);
       const folderKeys = new Set();
       for (const f of filtered) {
@@ -1612,7 +1630,7 @@ function RagTab({ projectId }) {
       setProjectFileFoldersCollapsed(new Set(folderKeys));
       setFilesLoading(false);
     }).catch(() => setFilesLoading(false));
-  };
+  }, [projectId]);
 
   React.useEffect(() => {
     ragApi.health()
@@ -1621,7 +1639,94 @@ function RagTab({ projectId }) {
   }, []);
   React.useEffect(() => {
     if (projectId) loadFiles();
+  }, [projectId, loadFiles]);
+  const refreshGptRagStatus = React.useCallback(() => {
+    if (!projectId) return;
+    gptRagApi
+      .status(projectId)
+      .then(setGptRagStatus)
+      .catch(() => setGptRagStatus({ configured: false, openai: false, reason: 'status failed' }));
   }, [projectId]);
+
+  const runGptSync = React.useCallback(() => {
+    if (!projectId || gptSyncLockRef.current) return;
+    gptSyncLockRef.current = true;
+    setGptRagSyncing(true);
+    setError(null);
+    gptRagApi
+      .sync(projectId)
+      .then(res => {
+        setGptSyncHadError(false);
+        const msg = res.uploaded != null ? `${t.ragGptSyncDone} (${res.uploaded} קבצים)` : t.ragGptSyncDone;
+        setActionMessage(msg);
+        setTimeout(() => setActionMessage(null), 4000);
+        refreshGptRagStatus();
+      })
+      .catch(e => {
+        setGptSyncHadError(true);
+        setError(e.response?.data?.error || e.message || 'סנכרון נכשל');
+      })
+      .finally(() => {
+        gptSyncLockRef.current = false;
+        setGptRagSyncing(false);
+      });
+  }, [projectId, refreshGptRagStatus]);
+
+  React.useEffect(() => {
+    gptAutoSyncForProjectRef.current = '';
+    setGptSyncHadError(false);
+  }, [projectId]);
+
+  React.useEffect(() => {
+    if (!projectId || filesLoading) return;
+    const st = gptRagStatus;
+    if (!st?.openai || st.vector_store_id || gptRagSyncing) return;
+    const hasEligible = projectFiles.some(isGptOpenAiEligibleProjectFile);
+    if (!hasEligible) return;
+    if (gptAutoSyncForProjectRef.current === projectId) return;
+    gptAutoSyncForProjectRef.current = projectId;
+    runGptSync();
+  }, [projectId, filesLoading, gptRagStatus, gptRagSyncing, projectFiles, runGptSync]);
+
+  React.useEffect(() => {
+    if (!projectId) return;
+    refreshGptRagStatus();
+  }, [projectId, refreshGptRagStatus]);
+
+  const runStorageRepairFromRag = React.useCallback(() => {
+    if (!projectId || storageRepairLoading) return;
+    setStorageRepairLoading(true);
+    setError(null);
+    projectFilesApi
+      .repairStorageFromRag(projectId)
+      .then((res) => {
+        const n = res.repaired_count ?? 0;
+        const f = res.failed_count ?? 0;
+        setActionMessage(
+          n > 0
+            ? `${t.gptRagRepairStorageFromRag}: ${n} מסמכים תוקנו${f > 0 ? `, ${f} נכשלו` : ''}.`
+            : f > 0
+              ? `לא שוחזר אף מסמך (${f} כשלויות — ודא שהשמות תואמים לאינדוקס).`
+              : 'אין מסמכים ללא נתיב אחסון.'
+        );
+        setTimeout(() => setActionMessage(null), 6000);
+        loadFiles();
+        refreshGptRagStatus();
+      })
+      .catch((e) => {
+        setError(e.response?.data?.error || e.message || 'שחזור נכשל');
+      })
+      .finally(() => setStorageRepairLoading(false));
+  }, [projectId, storageRepairLoading, refreshGptRagStatus, loadFiles]);
+
+  React.useEffect(() => {
+    if (!projectId) return;
+    const onVis = () => {
+      if (document.visibilityState === 'visible') refreshGptRagStatus();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [projectId, refreshGptRagStatus]);
   React.useEffect(() => {
     const el = sharepointFolderInputRef.current;
     if (el) {
@@ -1822,50 +1927,30 @@ function RagTab({ projectId }) {
     });
   };
 
-  /** When "all files" is selected, if the query mentions one specific project file by name, restrict search to that file for a better answer. */
-  const filenameFromQuery = (function () {
-    const q = (query || '').trim();
-    if (!q || selectedFilename) return null;
-    const mentioned = projectFiles.filter(f => {
-      const name = (f.original_name || '').trim();
-      if (!name) return false;
-      if (q.includes(name)) return true;
-      const nameNoExt = name.replace(/\.[^.]+$/, '');
-      return nameNoExt.length > 2 && q.includes(nameNoExt);
-    });
-    if (mentioned.length === 0) return null;
-    if (mentioned.length === 1) return mentioned[0].original_name;
-    return mentioned.reduce((a, b) => (a.original_name.length >= b.original_name.length ? a : b)).original_name;
-  })();
-
   const runSearch = () => {
     if (!query.trim()) return;
     setLoading(true);
     setError(null);
     setResult(null);
-    const body = { session_id: null, query: query.trim(), use_4_agents: true };
-    ragApi.researchSession()
-      .then(session => {
-        body.session_id = session.session_id;
-        if (selectedFilename) {
-          body.filename = selectedFilename;
-        } else if (filenameFromQuery) {
-          body.filename = filenameFromQuery;
-        }
-        return ragApi.researchRun(body);
-      })
+    gptRagApi
+      .query(projectId, { query: query.trim() })
       .then(data => {
         const out = data.outputs || {};
         const text = (out.synthesis || out.research || out.analysis || '').trim();
-        if (text) {
-          setResult(text);
-        } else if (data.run_id != null) {
-          setResult('לא נוצר טקסט. ייתכן שהמודל לא זמין או החזיר תשובה ריקה. נסה שוב או בדוק את הגדרות LLM ב-Matriya.');
+        if (text) setResult(text);
+        else if (data.run_id != null) {
+          setResult('לא נוצר טקסט. נסה שוב או בדוק את מפתח OpenAI והמאגר.');
         } else {
           setResult(JSON.stringify(data, null, 2));
         }
       })
-      .catch(e => setError(e.response?.data?.error || e.message || (e.code === 'ECONNABORTED' ? 'הבקשה ארכה יותר מדי – נסה שוב.' : 'שגיאה בביצוע השאילתה.')))
+      .catch(e =>
+        setError(
+          e.response?.data?.error ||
+            e.message ||
+            (e.code === 'ECONNABORTED' ? 'הבקשה ארכה יותר מדי – נסה שוב.' : 'שגיאה בביצוע השאילתה.')
+        )
+      )
       .finally(() => setLoading(false));
   };
 
@@ -2350,22 +2435,158 @@ function RagTab({ projectId }) {
 
       <section className="rag-section rag-section-ask" aria-labelledby="docs-ask-heading">
         <h4 id="docs-ask-heading" style={{ fontSize: '1rem', marginBottom: 8 }}>{t.docsAskSection}</h4>
-        <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: 12 }}>{t.docsAskHint}</p>
-        {projectFiles.length > 0 && (
-          <div className="form-group">
-            <label>{t.queryOver}</label>
-            <select value={selectedFilename} onChange={e => setSelectedFilename(e.target.value)}>
-              <option value="">{t.allFiles}</option>
-              {projectFiles.map(f => (
-                <option key={f.id} value={f.original_name}>{f.original_name}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        {(() => {
+          const hasAnyProjectFile = projectFiles.length > 0;
+          const hasStoredFile = projectFiles.some(f => f.storage_path && String(f.storage_path).trim());
+          const hasGptEligibleFile = projectFiles.some(isGptOpenAiEligibleProjectFile);
+          let dotColor = 'var(--border)';
+          let label = t.gptRagIndicatorLoading;
+          let hintId = undefined;
+          if (gptRagStatus) {
+            if (!gptRagStatus.openai) {
+              dotColor = 'var(--error, #c0392b)';
+              label = gptRagStatus.reason || t.ragGptOpenAiUnavailable;
+              hintId = 'rag-query-disabled-hint-gpt';
+            } else if (gptRagSyncing) {
+              dotColor = 'var(--accent)';
+              label = t.gptRagIndicatorSyncing;
+              hintId = 'rag-query-disabled-hint-gpt';
+            } else if (gptRagStatus.vector_store_id) {
+              dotColor = 'var(--success)';
+              label = t.gptRagIndicatorSynced;
+            } else if (!hasGptEligibleFile) {
+              dotColor = 'var(--muted)';
+              if (!hasAnyProjectFile) {
+                label = t.gptRagIndicatorNoFiles;
+              } else if (!hasStoredFile) {
+                label = t.gptRagIndicatorNoStoragePath;
+              } else {
+                label = t.gptRagIndicatorNoSupportedFiles;
+              }
+              hintId = 'rag-query-disabled-hint-gpt';
+            } else if (gptSyncHadError) {
+              dotColor = 'var(--error, #c0392b)';
+              label = t.gptRagIndicatorSyncFailed;
+              hintId = 'rag-query-disabled-hint-gpt';
+            } else {
+              dotColor = 'var(--accent)';
+              label = t.gptRagIndicatorPending;
+              hintId = 'rag-query-disabled-hint-gpt';
+            }
+          }
+          return (
+            <div
+              className="form-group rag-gpt-status-row"
+              style={{
+                padding: '10px 12px',
+                background: 'var(--bg-soft)',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                marginBottom: 12
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span
+                  aria-hidden
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    background: dotColor
+                  }}
+                />
+                <span id={hintId} style={{ fontSize: '0.9rem', flex: '1 1 200px' }}>
+                  {label}
+                </span>
+                {gptRagStatus?.openai && gptRagStatus.vector_store_id && !gptRagSyncing && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ fontSize: '0.85rem', padding: '4px 10px' }}
+                    disabled={!hasGptEligibleFile}
+                    onClick={runGptSync}
+                  >
+                    {t.gptRagResyncShort}
+                  </button>
+                )}
+                {gptRagStatus?.openai &&
+                  !gptRagStatus.vector_store_id &&
+                  !gptRagSyncing &&
+                  hasGptEligibleFile &&
+                  gptSyncHadError && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ fontSize: '0.85rem', padding: '4px 10px' }}
+                      onClick={() => {
+                        gptAutoSyncForProjectRef.current = '';
+                        setGptSyncHadError(false);
+                        runGptSync();
+                      }}
+                    >
+                      {t.gptRagRetrySync}
+                    </button>
+                  )}
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{ fontSize: '0.85rem', padding: '4px 10px' }}
+                  disabled={gptRagSyncing}
+                  onClick={refreshGptRagStatus}
+                >
+                  {t.gptRagRefreshStatus}
+                </button>
+                {hasAnyProjectFile &&
+                  projectFiles.some((f) => !f.storage_path || !String(f.storage_path).trim()) &&
+                  health?.ok &&
+                  !gptRagSyncing &&
+                  !storageRepairLoading && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ fontSize: '0.85rem', padding: '4px 10px' }}
+                      onClick={runStorageRepairFromRag}
+                      title={t.gptRagIndicatorNoStoragePath}
+                    >
+                      {t.gptRagRepairStorageFromRag}
+                    </button>
+                  )}
+                {storageRepairLoading && (
+                  <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>{t.gptRagRepairStorageRunning}</span>
+                )}
+              </div>
+            </div>
+          );
+        })()}
         <label htmlFor="rag-query-input">{t.askQuestion}</label>
-        <textarea id="rag-query-input" value={query} onChange={e => setQuery(e.target.value)} placeholder={t.questionPlaceholder} rows={4} aria-describedby={!health?.ok ? 'rag-query-disabled-hint' : undefined} />
-        {!health?.ok && <p id="rag-query-disabled-hint" className="muted" style={{ fontSize: '0.85rem', marginTop: 4 }}>{health?.error || t.ragNotAvailable}</p>}
-        <button type="button" onClick={runSearch} disabled={loading || !health?.ok || projectFiles.length === 0} className={loading ? 'btn-loading' : ''} title={!health?.ok ? (health?.error || t.ragNotAvailable) : undefined}>{loading ? t.loading : t.run}</button>
+        <textarea
+          id="rag-query-input"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder={t.questionPlaceholder}
+          rows={4}
+          aria-describedby={
+            gptRagStatus && (!gptRagStatus.openai || !gptRagStatus.vector_store_id) ? 'rag-query-disabled-hint-gpt' : undefined
+          }
+        />
+        <button
+          type="button"
+          onClick={runSearch}
+          disabled={
+            loading ||
+            projectFiles.length === 0 ||
+            !gptRagStatus?.openai ||
+            !gptRagStatus?.vector_store_id
+          }
+          className={loading ? 'btn-loading' : ''}
+          title={!gptRagStatus?.vector_store_id ? t.ragGptNoVectorTitle : undefined}
+        >
+          {loading ? t.loading : t.run}
+        </button>
+        {actionMessage && !result && (
+          <p style={{ color: 'var(--success)', fontSize: '0.9rem', marginTop: 12 }}>{actionMessage}</p>
+        )}
         {result && (
           <>
             <div className="flex gap mt-16" style={{ flexWrap: 'wrap' }}>
