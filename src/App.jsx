@@ -1140,10 +1140,17 @@ function LabTab({ projectId }) {
   const labFileInputRef = React.useRef(null);
   const [emailImportLabLoading, setEmailImportLabLoading] = React.useState(false);
 
-  /** After "ייבא למעבדה" from email: load imported project file into experiment text. */
+  /** After "ייבא למעבדה" from email: use server-parsed text if present, else fetch file + parse. */
   React.useEffect(() => {
     const payload = location.state && location.state.labEmailImport;
-    if (!payload || !payload.fileId || !projectId) return undefined;
+    if (!payload || !projectId) return undefined;
+    if (payload.prefetchedText != null) {
+      setError(null);
+      setExperimentContext(String(payload.prefetchedText));
+      navigate(`/project/${projectId}/section/lab`, { replace: true, state: {} });
+      return undefined;
+    }
+    if (!payload.fileId) return undefined;
     const { fileId, originalName } = payload;
     let cancelled = false;
     setEmailImportLabLoading(true);
@@ -2568,9 +2575,14 @@ function EmailsTab({ projectId }) {
         const row = res && res.file;
         const fileId = row && row.id;
         const originalName = (row && (row.original_name || row.originalName)) || 'file';
+        const prefetched =
+          res && res.lab_parsed_text != null && res.lab_parsed_text !== undefined ? res.lab_parsed_text : null;
         if (destination === 'lab' && fileId) {
           navigate(`/project/${projectId}/section/lab`, {
-            state: { labEmailImport: { fileId, originalName } }
+            state: {
+              labEmailImport:
+                prefetched != null ? { fileId, originalName, prefetchedText: prefetched } : { fileId, originalName }
+            }
           });
         } else if (destination === 'lab') {
           navigate(`/project/${projectId}/section/lab`);
