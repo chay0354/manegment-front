@@ -1605,6 +1605,10 @@ function RagTab({ projectId }) {
   const ragFolderInputRef = React.useRef(null);
   /** Document Q&A uses OpenAI File search only (Matriya RAG selector hidden for now). */
   const [gptRagStatus, setGptRagStatus] = React.useState(null);
+  const gptRagStatusRef = React.useRef(null);
+  React.useEffect(() => {
+    gptRagStatusRef.current = gptRagStatus;
+  }, [gptRagStatus]);
   const [gptRagSyncing, setGptRagSyncing] = React.useState(false);
   /** Prevents duplicate auto-sync for the same project until user leaves OpenAI mode or changes project. */
   const gptAutoSyncForProjectRef = React.useRef('');
@@ -1613,23 +1617,28 @@ function RagTab({ projectId }) {
   const [storageRepairLoading, setStorageRepairLoading] = React.useState(false);
 
   const loadFiles = React.useCallback(() => {
-    if (!projectId) return;
-    projectFilesApi.list(projectId).then(d => {
-      const files = d.files || [];
-      const filtered = files.filter(f => f.project_id == null || String(f.project_id) === String(projectId));
-      setProjectFiles(filtered);
-      const folderKeys = new Set();
-      for (const f of filtered) {
-        const path = f.folder_display_name != null && f.folder_display_name !== '' ? String(f.folder_display_name).trim() : '';
-        if (path) {
-          path.split(/[/\\>]+/).forEach((_, i, parts) => folderKeys.add(parts.slice(0, i + 1).join('/')));
-        } else {
-          folderKeys.add('\0');
+    if (!projectId) return Promise.resolve();
+    return projectFilesApi
+      .list(projectId)
+      .then((d) => {
+        const files = d.files || [];
+        const filtered = files.filter(f => f.project_id == null || String(f.project_id) === String(projectId));
+        setProjectFiles(filtered);
+        const folderKeys = new Set();
+        for (const f of filtered) {
+          const path = f.folder_display_name != null && f.folder_display_name !== '' ? String(f.folder_display_name).trim() : '';
+          if (path) {
+            path.split(/[/\\>]+/).forEach((_, i, parts) => folderKeys.add(parts.slice(0, i + 1).join('/')));
+          } else {
+            folderKeys.add('\0');
+          }
         }
-      }
-      setProjectFileFoldersCollapsed(new Set(folderKeys));
-      setFilesLoading(false);
-    }).catch(() => setFilesLoading(false));
+        setProjectFileFoldersCollapsed(new Set(folderKeys));
+        setFilesLoading(false);
+      })
+      .catch(() => {
+        setFilesLoading(false);
+      });
   }, [projectId]);
 
   React.useEffect(() => {
@@ -1671,6 +1680,28 @@ function RagTab({ projectId }) {
         setGptRagSyncing(false);
       });
   }, [projectId, refreshGptRagStatus]);
+
+  /**
+   * After new files land in the project, run the same sync as «סנכרון מחדש» (when OpenAI is enabled).
+   * Skips if uploaded names are all non–GPT-searchable extensions. Debounced slightly so the file list API includes new rows.
+   */
+  const queueGptResyncAfterUpload = React.useCallback(
+    (fileNameHints) => {
+      const hints = Array.isArray(fileNameHints) ? fileNameHints : [];
+      const unknownOrEligible =
+        hints.length === 0 || hints.some((n) => GPT_OPENAI_SYNC_FILE_RE.test(String(n || '')));
+      if (!unknownOrEligible) return;
+      if (!gptRagStatusRef.current?.openai) return;
+      window.setTimeout(() => {
+        loadFiles()
+          .catch(() => {})
+          .finally(() => {
+            runGptSync();
+          });
+      }, 500);
+    },
+    [loadFiles, runGptSync]
+  );
 
   React.useEffect(() => {
     gptAutoSyncForProjectRef.current = '';
@@ -1797,10 +1828,12 @@ function RagTab({ projectId }) {
     setUploading(true);
     setUploadProgress({ current: 0, total: files.length });
     const errors = [];
+    const uploadedOk = [];
     for (let i = 0; i < files.length; i++) {
       setUploadProgress(prev => ({ ...prev, current: i + 1 }));
       try {
         await projectFilesApi.upload(projectId, files[i], folderDisplayName);
+        uploadedOk.push(files[i].name || files[i].webkitRelativePath || 'file');
       } catch (err) {
         errors.push(files[i].name + ': ' + (err.response?.data?.error || err.message));
       }
@@ -1808,7 +1841,8 @@ function RagTab({ projectId }) {
     e.target.value = '';
     setUploading(false);
     setUploadProgress({ current: 0, total: 0 });
-    loadFiles();
+    await loadFiles();
+    queueGptResyncAfterUpload(uploadedOk);
     if (errors.length) setError(errors.length === files.length ? errors.join('; ') : t.uploadSomeFailed + ' ' + errors.join('; '));
   };
 
@@ -2097,7 +2131,7 @@ function RagTab({ projectId }) {
                       return (
                         <li key={node.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)', paddingRight: depth * 16 }}>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }} title={node.path}>{finalDisplay}</span>
-                          <button type="button" className="secondary" disabled={addingFromBucket === node.path || addingFolderPath} onClick={() => { setAddingFromBucket(node.path); projectFilesApi.addFromBucket(projectId, node.path, safeDisplayName(display, node.path, node.name), parentFolderDisplayName).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
+                          <button type="button" className="secondary" disabled={addingFromBucket === node.path || addingFolderPath} onClick={() => { setAddingFromBucket(node.path); const hint = [finalDisplay || node.path]; projectFilesApi.addFromBucket(projectId, node.path, safeDisplayName(display, node.path, node.name), parentFolderDisplayName).then(() => { loadFiles(); queueGptResyncAfterUpload(hint); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
                         </li>
                       );
                     }
@@ -2110,7 +2144,7 @@ function RagTab({ projectId }) {
                             <span style={{ marginLeft: 8 }}>{expanded ? '▼' : '▶'}</span>
                             <span style={{ marginRight: 6 }}>{finalDisplay}</span>
                           </button>
-                          <button type="button" className="secondary" disabled={isAddingThisFolder || addingFromBucket != null} onClick={() => { (async () => { const files = collectFilesUnder(node, sharepointDisplayNamesMap); if (files.length === 0) return; setAddingFolderPath(node.pathPrefix); setAddingFolderProgress({ current: 0, total: files.length }); for (let i = 0; i < files.length; i++) { setAddingFolderProgress(prev => ({ ...prev, current: i + 1 })); try { await projectFilesApi.addFromBucket(projectId, files[i].path, files[i].displayName ?? files[i].path.split('/').pop(), finalDisplay); } catch (err) { setError(err.response?.data?.error || err.message); } } loadFiles(); setAddingFolderPath(null); setAddingFolderProgress({ current: 0, total: 0 }); })(); }}>{isAddingThisFolder && addingFolderProgress.total ? `${t.uploading} (${addingFolderProgress.current}/${addingFolderProgress.total})` : isAddingThisFolder ? t.uploading : t.addFolderToProject}</button>
+                          <button type="button" className="secondary" disabled={isAddingThisFolder || addingFromBucket != null} onClick={() => { (async () => { const bucketFiles = collectFilesUnder(node, sharepointDisplayNamesMap); if (bucketFiles.length === 0) return; setAddingFolderPath(node.pathPrefix); setAddingFolderProgress({ current: 0, total: bucketFiles.length }); const hints = []; for (let i = 0; i < bucketFiles.length; i++) { setAddingFolderProgress(prev => ({ ...prev, current: i + 1 })); try { await projectFilesApi.addFromBucket(projectId, bucketFiles[i].path, bucketFiles[i].displayName ?? bucketFiles[i].path.split('/').pop(), finalDisplay); hints.push(bucketFiles[i].displayName ?? bucketFiles[i].path.split('/').pop()); } catch (err) { setError(err.response?.data?.error || err.message); } } await loadFiles(); queueGptResyncAfterUpload(hints); setAddingFolderPath(null); setAddingFolderProgress({ current: 0, total: 0 }); })(); }}>{isAddingThisFolder && addingFolderProgress.total ? `${t.uploading} (${addingFolderProgress.current}/${addingFolderProgress.total})` : isAddingThisFolder ? t.uploading : t.addFolderToProject}</button>
                         </div>
                         {expanded && node.children && node.children.length > 0 && (
                           <ul style={{ listStyle: 'none', padding: 0, margin: 0, borderRight: '1px solid var(--border)', marginRight: 8 }}>
@@ -2131,7 +2165,7 @@ function RagTab({ projectId }) {
                           return (
                             <li key={f.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.path}>{safeDisplayName(fileDisplay, f.path, f.name)}</span>
-                              <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); projectFilesApi.addFromBucket(projectId, f.path, safeDisplayName(fileDisplay, f.path, f.name), folderDisplayName).then(() => { loadFiles(); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
+                              <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); const hint = [safeDisplayName(fileDisplay, f.path, f.name)]; projectFilesApi.addFromBucket(projectId, f.path, safeDisplayName(fileDisplay, f.path, f.name), folderDisplayName).then(() => { loadFiles(); queueGptResyncAfterUpload(hint); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
                             </li>
                           );
                         })}
@@ -2273,6 +2307,7 @@ function RagTab({ projectId }) {
                     setError(null);
                     const folderPath = sharepointUploadFolderName.trim() || (sharepointUploadFiles.length > 1 ? 'upload' : '');
                     const filesToUpload = [...sharepointUploadFiles];
+                    const gptHintNames = filesToUpload.map((f) => f.name || f.webkitRelativePath || '');
                     const uploadId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `upload-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
                     const progressOpts = {
                       uploadId,
@@ -2297,10 +2332,17 @@ function RagTab({ projectId }) {
                         setShowSharepointUploadModal(false);
                         setSharepointUploadFiles([]);
                         setSharepointUploadFolderName('');
+                        const afterSharepointIngest = () =>
+                          loadFiles()
+                            .catch(() => {})
+                            .finally(() => queueGptResyncAfterUpload(gptHintNames));
                         if (res.uploaded_paths?.length) {
-                          projectFilesApi.registerAndIngest(projectId, res.uploaded_paths).then(loadFiles).catch(loadFiles);
+                          projectFilesApi
+                            .registerAndIngest(projectId, res.uploaded_paths)
+                            .then(afterSharepointIngest)
+                            .catch(afterSharepointIngest);
                         } else {
-                          loadFiles();
+                          afterSharepointIngest();
                         }
                         if (showSharepointPicker) {
                           setSharepointBucketLoading(true);
