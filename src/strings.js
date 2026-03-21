@@ -176,6 +176,8 @@ export default {
   emailImportToLab: 'ייבא למעבדה',
   emailImporting: 'מייבא…',
   emailImportDone: 'הקובץ יובא. אפשר לפתוח את לשונית המסמכים או המעבדה.',
+  emailImportLabLoading: 'טוען קובץ מהמייל למעבדה…',
+  emailImportLabParseError: 'לא הצלחנו לטעון את הקובץ למעבדה. נסה שוב או העלה את הקובץ ידנית.',
   emailNoAttachments: 'אין קבצים מצורפים במייל זה (או המייל נשמר לפני תמיכה במצורפים).',
   emailSentBy: 'נשלח על ידי',
   emailAttachFromProject: 'צרף קבצים ממסמכי הפרויקט',

@@ -1109,6 +1109,7 @@ const LAB_AI_SECTION_IDS = ['insights', 'contradictions', 'failure-patterns', 's
 
 function LabTab({ projectId }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [experiments, setExperiments] = React.useState([]);
   const [sessions, setSessions] = React.useState([]);
   const [materials, setMaterials] = React.useState([]);
@@ -1137,6 +1138,51 @@ function LabTab({ projectId }) {
   const [savingExperiment, setSavingExperiment] = React.useState(false);
   const [deletingSavedId, setDeletingSavedId] = React.useState(null);
   const labFileInputRef = React.useRef(null);
+  const [emailImportLabLoading, setEmailImportLabLoading] = React.useState(false);
+
+  /** After "ייבא למעבדה" from email: load imported project file into experiment text. */
+  React.useEffect(() => {
+    const payload = location.state && location.state.labEmailImport;
+    if (!payload || !payload.fileId || !projectId) return undefined;
+    const { fileId, originalName } = payload;
+    let cancelled = false;
+    setEmailImportLabLoading(true);
+    setError(null);
+    projectFilesApi
+      .fetchBlob(projectId, fileId)
+      .then(async (blob) => {
+        if (cancelled) return;
+        const name = (originalName && String(originalName).trim()) || 'file';
+        const lower = name.toLowerCase();
+        const useParseApi =
+          lower.endsWith('.xlsx') ||
+          lower.endsWith('.xls') ||
+          lower.endsWith('.csv') ||
+          lower.endsWith('.txt') ||
+          lower.endsWith('.json') ||
+          lower.endsWith('.pdf');
+        const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
+        if (useParseApi) {
+          const d = await labApi.parseExperimentFile(projectId, file);
+          if (cancelled) return;
+          setExperimentContext(d.text ?? '');
+        } else {
+          const text = await blob.text();
+          if (cancelled) return;
+          setExperimentContext(text);
+        }
+        navigate(`/project/${projectId}/section/lab`, { replace: true, state: {} });
+      })
+      .catch((err) => {
+        if (!cancelled) setError(errorMessageFromResponse(err, t.emailImportLabParseError));
+      })
+      .finally(() => {
+        if (!cancelled) setEmailImportLabLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [location.state, projectId, navigate]);
 
   const load = () => {
     setLoading(true);
@@ -1261,12 +1307,15 @@ function LabTab({ projectId }) {
     { id: 'suggestion-engine', label: t.labSuggestionEngine }
   ];
 
-  if (loading && experiments.length === 0) return <div className="card tab-card"><p className="loading">{t.loading}</p></div>;
+  if (loading && experiments.length === 0 && !experimentContext.trim() && !emailImportLabLoading) {
+    return <div className="card tab-card"><p className="loading">{t.loading}</p></div>;
+  }
   if (error) return <div className="card tab-card"><p className="error">{error}</p><button type="button" className="secondary" onClick={load}>{t.retry}</button></div>;
 
   return (
     <div className="card tab-card">
       <h3 style={{ marginBottom: 16 }}>{t.labTab}</h3>
+      {emailImportLabLoading && <p className="loading" style={{ marginBottom: 12 }} aria-live="polite">{t.emailImportLabLoading}</p>}
 
       <section className="rag-section" style={{ marginBottom: 20 }}>
         <p className="muted" style={{ marginBottom: 8, fontSize: '0.9rem' }}>{t.labExperimentInputHint}</p>
@@ -2514,10 +2563,20 @@ function EmailsTab({ projectId }) {
     setImportingKey(key);
     setImportNotice(null);
     emailsApi.importAttachment(projectId, storedEmailId, { attachment_id: attachmentId, destination })
-      .then(() => {
+      .then((res) => {
         setImportNotice({ ok: true, text: t.emailImportDone });
-        if (destination === 'lab') navigate(`/project/${projectId}/section/lab`);
-        else navigate(`/project/${projectId}/section/rag`);
+        const row = res && res.file;
+        const fileId = row && row.id;
+        const originalName = (row && (row.original_name || row.originalName)) || 'file';
+        if (destination === 'lab' && fileId) {
+          navigate(`/project/${projectId}/section/lab`, {
+            state: { labEmailImport: { fileId, originalName } }
+          });
+        } else if (destination === 'lab') {
+          navigate(`/project/${projectId}/section/lab`);
+        } else {
+          navigate(`/project/${projectId}/section/rag`);
+        }
       })
       .catch(e => setImportNotice({ ok: false, text: errorMessageFromResponse(e, '') }))
       .finally(() => setImportingKey(null));
