@@ -190,6 +190,27 @@ export const projectFiles = {
     a.click();
     URL.revokeObjectURL(url);
   },
+  /** Same as download but returns the Blob (e.g. lab: load imported email attachment into experiment text). */
+  fetchBlob: async (projectId, fileId) => {
+    const token = getStoredToken();
+    const r = await axios.get(`${API_BASE}/api/projects/${projectId}/files/${fileId}/download`, {
+      responseType: 'blob',
+      validateStatus: () => true,
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (r.status !== 200) {
+      const blob = r.data;
+      let msg = 'Download failed';
+      if (blob && (blob.type || '').startsWith('application/json')) {
+        try {
+          const j = JSON.parse(await blob.text());
+          msg = j.error || msg;
+        } catch (_) {}
+      }
+      throw Object.assign(new Error(msg), { response: { data: { error: msg } } });
+    }
+    return r.data;
+  },
   listSharepointBucket: (projectId) => api.get(`/api/projects/${projectId}/files/sharepoint-bucket`, { params: { _: Date.now() }, timeout: 60000 }).then(r => r.data),
   addFromBucket: (projectId, path, displayName, folderDisplayName) =>
     api.post(`/api/projects/${projectId}/files/from-bucket`, { path, displayName, folder_display_name: folderDisplayName || undefined }, { timeout: FILE_INGEST_TIMEOUT }).then(r => r.data),

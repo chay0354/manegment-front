@@ -2527,8 +2527,7 @@ function EmailsTab({ projectId }) {
     <div className="card tab-card emails-tab">
       <div className="emails-toolbar">
         <div className="emails-toolbar-left">
-          <span className="emails-toolbar-folders-label" id="emails-folder-label">{t.emailFoldersLabel}</span>
-          <div className="emails-folder-switch" role="tablist" aria-labelledby="emails-folder-label">
+          <div className="emails-folder-switch" role="tablist" aria-label={t.emailsTab}>
             <button
               type="button"
               role="tab"
