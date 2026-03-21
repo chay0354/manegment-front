@@ -1963,6 +1963,7 @@ function RagTab({ projectId }) {
 
   const runSearch = () => {
     if (!query.trim()) return;
+    if (gptRagSyncing || loading) return;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -2617,12 +2618,19 @@ function RagTab({ projectId }) {
           onClick={runSearch}
           disabled={
             loading ||
+            gptRagSyncing ||
             projectFiles.length === 0 ||
             !gptRagStatus?.openai ||
             !gptRagStatus?.vector_store_id
           }
           className={loading ? 'btn-loading' : ''}
-          title={!gptRagStatus?.vector_store_id ? t.ragGptNoVectorTitle : undefined}
+          title={
+            gptRagSyncing
+              ? t.ragGptRunWhileSyncingTitle
+              : !gptRagStatus?.vector_store_id
+                ? t.ragGptNoVectorTitle
+                : undefined
+          }
         >
           {loading ? t.loading : t.run}
         </button>

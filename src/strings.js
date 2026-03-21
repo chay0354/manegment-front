@@ -134,7 +134,7 @@ export default {
   ragGptSyncDone: 'סנכרון הושלם.',
   gptRagResyncShort: 'סנכרון מחדש',
   gptRagIndicatorLoading: 'בודק חיבור OpenAI…',
-  gptRagIndicatorSyncing: 'מסנכרן',
+  gptRagIndicatorSyncing: 'מסנכרן....',
   gptRagIndicatorPending: 'ממתין לסנכרון…',
   gptRagIndicatorSynced: 'מסונכרן',
   gptRagIndicatorNoFiles: 'אין קבצים בפרויקט.',
@@ -148,6 +148,8 @@ export default {
   gptRagRetrySync: 'נסה שוב',
   /** Tooltip on disabled «הרץ» when OpenAI selected but no vector store */
   ragGptNoVectorTitle: 'ממתין לסנכרון או אין מסמכים בפורמט נתמך ל־OpenAI',
+  /** Tooltip on disabled «הרץ» while document sync is in progress */
+  ragGptRunWhileSyncingTitle: 'לא ניתן להריץ בזמן סנכרון המסמכים (מסנכרן…)',
 
   ragTitle: 'שאלות (מטריה)',
   matriyaConnected: 'חיבור למטריה פעיל',
