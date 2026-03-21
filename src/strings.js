@@ -134,7 +134,7 @@ export default {
   ragGptSyncDone: 'סנכרון הושלם.',
   gptRagResyncShort: 'סנכרון מחדש',
   gptRagIndicatorLoading: 'בודק חיבור OpenAI…',
-  gptRagIndicatorSyncing: 'מסנכרן אל OpenAI… (עשוי לקחת מספר דקות)',
+  gptRagIndicatorSyncing: 'מסנכרן',
   gptRagIndicatorPending: 'ממתין לסנכרון…',
   gptRagIndicatorSynced: 'מסונכרן',
   gptRagIndicatorNoFiles: 'אין קבצים בפרויקט.',
