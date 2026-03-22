@@ -1569,9 +1569,21 @@ function isGptOpenAiEligibleProjectFile(f) {
   return GPT_OPENAI_SYNC_FILE_RE.test(base);
 }
 
+function formatGptRagSourcesAppendix(sources) {
+  if (!Array.isArray(sources) || sources.length === 0) return '';
+  const lines = sources.map((s, i) => {
+    const fn = (s && s.filename) || '—';
+    const ex = (s && s.excerpt) || '';
+    return `[${i + 1}] ${fn}\n${ex}`;
+  });
+  return `\n\n---\nמקורות (ציטוטים מהמסמכים):\n\n${lines.join('\n\n')}`;
+}
+
 function RagTab({ projectId }) {
   const [query, setQuery] = React.useState('');
   const [result, setResult] = React.useState(null);
+  /** OpenAI file_search snippets returned with the answer (filename + excerpt). */
+  const [answerSources, setAnswerSources] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState(null);
   const [health, setHealth] = React.useState(null);
@@ -1967,11 +1979,13 @@ function RagTab({ projectId }) {
     setLoading(true);
     setError(null);
     setResult(null);
+    setAnswerSources(null);
     gptRagApi
       .query(projectId, { query: query.trim() })
       .then(data => {
         const out = data.outputs || {};
         const text = (out.synthesis || out.research || out.analysis || '').trim();
+        setAnswerSources(Array.isArray(data.sources) ? data.sources : []);
         if (text) setResult(text);
         else if (data.run_id != null) {
           setResult('לא נוצר טקסט. נסה שוב או בדוק את מפתח OpenAI והמאגר.');
@@ -1991,12 +2005,15 @@ function RagTab({ projectId }) {
 
   const copyAnswer = () => {
     if (!result) return;
-    navigator.clipboard.writeText(String(result)).then(() => { setActionMessage(t.copySuccess); setTimeout(() => setActionMessage(null), 2000); }).catch(() => setError(t.copySuccess));
+    const appendix = formatGptRagSourcesAppendix(answerSources);
+    const payload = String(result) + appendix;
+    navigator.clipboard.writeText(payload).then(() => { setActionMessage(t.copySuccess); setTimeout(() => setActionMessage(null), 2000); }).catch(() => setError(t.copySuccess));
   };
   const saveAnswerAsNote = () => {
     if (!result) return;
     const title = (query || '').slice(0, 80) || t.askQuestion;
-    notesApi.create(projectId, { title, body: String(result) }).then(() => { setActionMessage(t.saveAsNoteSuccess); setTimeout(() => setActionMessage(null), 2000); }).catch(e => setError(e.response?.data?.error || e.message));
+    const body = String(result) + formatGptRagSourcesAppendix(answerSources);
+    notesApi.create(projectId, { title, body }).then(() => { setActionMessage(t.saveAsNoteSuccess); setTimeout(() => setActionMessage(null), 2000); }).catch(e => setError(e.response?.data?.error || e.message));
   };
 
   return (
@@ -2645,6 +2662,20 @@ function RagTab({ projectId }) {
             </div>
             {actionMessage && <p style={{ color: 'var(--success)', fontSize: '0.9rem', marginTop: 8 }}>{actionMessage}</p>}
             <div className="rag-result mt-16">{result}</div>
+            {Array.isArray(answerSources) && answerSources.length > 0 && (
+              <section className="rag-answer-sources mt-16" aria-label={t.ragAnswerSourcesTitle}>
+                <h4 className="rag-answer-sources__title">{t.ragAnswerSourcesTitle}</h4>
+                <p className="rag-answer-sources__hint muted">{t.ragAnswerSourcesHint}</p>
+                <ul className="rag-answer-sources__list">
+                  {answerSources.map((s, i) => (
+                    <li key={`${s.filename}-${i}`} className="rag-source-card">
+                      <div className="rag-source-card__file">{s.filename || '—'}</div>
+                      <blockquote className="rag-source-card__quote">{s.excerpt || ''}</blockquote>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </>
         )}
         {loading && <p className="loading mt-16">{t.running}</p>}

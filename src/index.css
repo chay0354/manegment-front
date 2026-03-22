@@ -888,6 +888,60 @@ label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9r
 .rag-tab .rag-section-ask button { pointer-events: auto; touch-action: manipulation; }
 .rag-tab textarea { min-height: 120px; margin-bottom: 12px; flex: 1; resize: vertical; }
 .rag-result { white-space: pre-wrap; padding: 16px; background: var(--bg); border-radius: var(--radius-sm); margin-top: 12px; flex: 1; overflow: auto; min-height: 100px; }
+
+/* GPT RAG: evidence quotes under the synthesized answer */
+.rag-answer-sources {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  background: var(--surface);
+  direction: rtl;
+  text-align: right;
+}
+.rag-answer-sources__title {
+  margin: 0 0 6px 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.rag-answer-sources__hint {
+  margin: 0 0 12px 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.rag-answer-sources__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rag-source-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg);
+}
+.rag-source-card__file {
+  padding: 8px 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.03);
+}
+.rag-source-card__quote {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--text);
+  border-right: 4px solid var(--accent);
+  border-left: none;
+  background: transparent;
+}
 .rag-result-markdown { white-space: normal; }
 .rag-result-markdown strong { font-weight: 700; }
 .rag-result-markdown p { margin: 0 0 0.75em 0; }

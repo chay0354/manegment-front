@@ -150,6 +150,9 @@ export default {
   ragGptNoVectorTitle: 'ממתין לסנכרון או אין מסמכים בפורמט נתמך ל־OpenAI',
   /** Tooltip on disabled «הרץ» while document sync is in progress */
   ragGptRunWhileSyncingTitle: 'לא ניתן להריץ בזמן סנכרון המסמכים (מסנכרן…)',
+  /** Document Q&A: retrieved excerpts shown under the answer */
+  ragAnswerSourcesTitle: 'מקורות מהמסמכים (ציטוטים)',
+  ragAnswerSourcesHint: 'קטעים שחיפוש המסמכים החזיר לפני ניסוח התשובה — לשקיפות וביקורת.',
 
   ragTitle: 'שאלות (מטריה)',
   matriyaConnected: 'חיבור למטריה פעיל',
