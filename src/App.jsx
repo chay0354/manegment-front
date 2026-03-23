@@ -1126,6 +1126,9 @@ function LabTab({ projectId }) {
   const [guardResult, setGuardResult] = React.useState(null);
   const [formulationInput, setFormulationInput] = React.useState('');
   const [formulationResult, setFormulationResult] = React.useState(null);
+  const [saveFormulationLoading, setSaveFormulationLoading] = React.useState(false);
+  const [saveFormulationFeedback, setSaveFormulationFeedback] = React.useState(null);
+  const [saveExperimentIdOptional, setSaveExperimentIdOptional] = React.useState('');
   const [similarExperimentId, setSimilarExperimentId] = React.useState('');
   const [similarResult, setSimilarResult] = React.useState(null);
   const [activeSection, setActiveSection] = React.useState('insights');
@@ -1265,6 +1268,56 @@ function LabTab({ projectId }) {
     } catch (_) { body.formula = formulationInput; }
     labApi.analysis.formulationIntelligence(projectId, body).then(d => setFormulationResult(d)).catch(err => setFormulationResult({ status: 'Risk', issues: [{ message: err.response?.data?.error || err.message }] }));
   };
+
+  const buildFormulationSavePayload = () => {
+    const raw = formulationInput.trim();
+    if (!raw) return null;
+    const body = {};
+    try {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === 'object' && parsed !== null) {
+        if (parsed.formula != null) body.formula = parsed.formula;
+        if (parsed.domain != null) body.domain = parsed.domain;
+        if (parsed.technology_domain != null) body.technology_domain = parsed.technology_domain;
+        if (parsed.materials != null) body.materials = parsed.materials;
+        if (parsed.percentages != null) body.percentages = parsed.percentages;
+        if (Object.keys(body).length === 0) body.formula = raw;
+      } else {
+        body.formula = raw;
+      }
+    } catch {
+      body.formula = raw;
+    }
+    if (saveExperimentIdOptional.trim()) body.experiment_id = saveExperimentIdOptional.trim();
+    return body;
+  };
+
+  const saveFormulationAsExperiment = () => {
+    const body = buildFormulationSavePayload();
+    if (!body) {
+      setError(t.labFormulationSaveNeedInput);
+      return;
+    }
+    setSaveFormulationLoading(true);
+    setSaveFormulationFeedback(null);
+    setError(null);
+    labApi
+      .saveExperimentFromFormulation(projectId, body)
+      .then((d) => {
+        const id = d.experiment?.experiment_id || '';
+        const matN = d.materials_written || 0;
+        setSaveFormulationFeedback(
+          `${t.labSaveAsExperimentSuccess(id)} ${t.labSaveAsExperimentMaterialsCount(matN)}`.trim()
+        );
+        load();
+      })
+      .catch((err) => {
+        setSaveFormulationFeedback(null);
+        setError(errorMessageFromResponse(err, t.labSaveAsExperiment));
+      })
+      .finally(() => setSaveFormulationLoading(false));
+  };
+
   const runSimilarExperiments = () => {
     setSimilarResult(null);
     labApi.analysis.similarExperiments(projectId, similarExperimentId.trim()).then(d => setSimilarResult(d)).catch(err => setSimilarResult({ error: err.response?.data?.error || err.message }));
@@ -1489,8 +1542,19 @@ function LabTab({ projectId }) {
         <section className="rag-section">
           <label>{t.labFormulationIntelligence}</label>
           <p className="muted" style={{ marginBottom: 8 }}>{t.labFormulationIntelligenceHint}</p>
-          <textarea className="form-control" dir="ltr" rows={4} placeholder={t.labFormulationPlaceholder} value={formulationInput} onChange={e => setFormulationInput(e.target.value)} />
-          <button type="button" onClick={runFormulationIntelligence} style={{ marginTop: 8 }}>{t.check}</button>
+          <textarea className="form-control" dir="ltr" rows={4} placeholder={t.labFormulationPlaceholder} value={formulationInput} onChange={e => { setFormulationInput(e.target.value); setSaveFormulationFeedback(null); }} />
+          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <button type="button" onClick={runFormulationIntelligence}>{t.check}</button>
+            <button type="button" className="secondary" disabled={saveFormulationLoading} onClick={saveFormulationAsExperiment}>
+              {saveFormulationLoading ? t.loading : t.labSaveAsExperiment}
+            </button>
+          </div>
+          <p className="muted" style={{ marginTop: 10, marginBottom: 6 }}>{t.labSaveAsExperimentHint}</p>
+          <label className="muted" style={{ display: 'block', marginBottom: 4 }}>{t.labSaveExperimentIdOptional}</label>
+          <input type="text" className="form-control" dir="ltr" style={{ maxWidth: 360 }} value={saveExperimentIdOptional} onChange={e => setSaveExperimentIdOptional(e.target.value)} placeholder="form-…" />
+          {saveFormulationFeedback && (
+            <p style={{ marginTop: 10, color: 'var(--success, #2e7d32)' }}>{saveFormulationFeedback}</p>
+          )}
           {formulationResult && <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-soft)', borderRadius: 8 }}><p><strong>{t.labStatus}:</strong> <span style={{ color: formulationResult.status === 'OK' ? 'green' : formulationResult.status === 'Warning' ? 'orange' : 'red' }}>{formulationResult.status}</span></p>{(formulationResult.issues || []).length > 0 && <ul style={{ paddingRight: 20 }}>{formulationResult.issues.map((issue, i) => <li key={i}>{issue.message || issue}</li>)}</ul>}</div>}
         </section>
       )}

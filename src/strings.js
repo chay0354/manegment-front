@@ -320,6 +320,13 @@ export default {
   labFormulationIntelligence: 'Formulation Intelligence',
   labFormulationIntelligenceHint: 'בדיקה לפני ניסוי: מאזן מסה, טווחים, התאמה לניסויים שנכשלו.',
   labFormulationPlaceholder: 'פורמולה או JSON: { "formula": "...", "domain": "...", "materials": [], "percentages": {} }',
+  labSaveAsExperiment: 'שמירה כניסוי במעבדה',
+  labSaveAsExperimentHint:
+    'נשמר ב־lab_experiments (תוצאות ריקות, סטטוס partial) וב־experiment_materials לפי חומרים ואחוזים. דורש טבלת experiment_materials ב-Supabase (ראה maneger-back/sql/create_experiment_materials.sql).',
+  labSaveExperimentIdOptional: 'מזהה ניסוי (אופציונלי)',
+  labFormulationSaveNeedInput: 'הזן פורמולה או JSON עם פורמולה/חומרים לפני השמירה.',
+  labSaveAsExperimentSuccess: (id) => `נשמר. experiment_id: ${id}`,
+  labSaveAsExperimentMaterialsCount: (n) => (n > 0 ? `נשמרו ${n} רשומות ב־experiment_materials.` : ''),
   labStatus: 'סטטוס',
   labSimilarExperimentsTitle: 'ניסויים דומים',
   labSimilarExperimentsHint: 'הזן מזהה ניסוי (experiment_id או id) כדי למצוא ניסויים דומים לפי חומרים ופרופורציות.',

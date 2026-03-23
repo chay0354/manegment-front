@@ -360,6 +360,8 @@ export const projectFiles = {
 
 export const lab = {
   experiments: (projectId, params) => api.get(`/api/projects/${projectId}/experiments`, { params }).then(r => r.data),
+  saveExperimentFromFormulation: (projectId, body) =>
+    api.post(`/api/projects/${projectId}/experiments/from-formulation`, body).then((r) => r.data),
   researchSessions: (projectId) => api.get(`/api/projects/${projectId}/research-sessions`).then(r => r.data),
   createResearchSession: (projectId, body) => api.post(`/api/projects/${projectId}/research-sessions`, body).then(r => r.data),
   materialLibrary: (projectId) => api.get(`/api/projects/${projectId}/material-library`).then(r => r.data),
