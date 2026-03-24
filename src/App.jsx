@@ -3775,8 +3775,14 @@ export default function App() {
     if (token) {
       setAuth(token, storedUser);
       setUser(storedUser || null);
-      setAuthChecked(true);
-      authApi.me().then(me => setUser(me)).catch(() => { clearAuth(); setUser(null); });
+      authApi
+        .me()
+        .then((me) => setUser(me))
+        .catch(() => {
+          clearAuth();
+          setUser(null);
+        })
+        .finally(() => setAuthChecked(true));
     } else {
       setUser(storedUser);
       setAuthChecked(true);
