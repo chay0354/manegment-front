@@ -1436,32 +1436,6 @@ function LabTab({ projectId }) {
   return (
     <div className="card tab-card">
       <h3 style={{ marginBottom: 16 }}>{t.labTab}</h3>
-      <details
-        className="lab-research-charter"
-        style={{
-          marginBottom: 16,
-          padding: '10px 12px',
-          borderRadius: 8,
-          border: '1px solid var(--border, #c9ccd1)',
-          background: 'var(--bg-soft, #f7f8fa)'
-        }}
-      >
-        <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' }}>{t.labResearchCharterSummary}</summary>
-        <div
-          className="muted"
-          dir="rtl"
-          style={{
-            marginTop: 12,
-            whiteSpace: 'pre-wrap',
-            fontSize: '0.88rem',
-            lineHeight: 1.55,
-            maxHeight: 420,
-            overflow: 'auto'
-          }}
-        >
-          {t.labResearchCharterBody}
-        </div>
-      </details>
       {emailImportLabLoading && <p className="loading" style={{ marginBottom: 12 }} aria-live="polite">{t.emailImportLabLoading}</p>}
 
       <section className="rag-section" style={{ marginBottom: 20 }}>
