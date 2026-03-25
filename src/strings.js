@@ -280,6 +280,60 @@ export default {
   signupError: 'ההרשמה נכשלה.',
 
   labTab: 'מעבדה',
+  labResearchCharterSummary: 'עקרונות אמינות מחקר ו־7 בדיקות PASS (חי · דוד)',
+  labResearchCharterBody: `חי,
+
+מערכת מחקר לא טועה — היא או יודעת או לא יודעת.
+
+חשוב לחדד לפני שממשיכים:
+אנחנו לא בונים AI שעונה תשובות — אנחנו בונים מערכת מחקר עם תנאי אמינות ברורים.
+
+הדרישה היא לא דיוק הסתברותי, אלא התנהגות דטרמיניסטית:
+• אין evidence → לא עונים
+• יש כמה ערכים → מציגים אי־ודאות
+• יש ערך → חד־משמעי ומגובה
+
+---
+
+לסגירת השלב — 7 נקודות עם PASS ברור:
+
+🔴 1. Excel → מבנה פורמולציה
+שאלה: "מה היחסים בין הרכיבים"
+PASS: רשימת חומרים + אחוזים
+
+🔴 2. Semantic mapping
+"יחסים" / "אחוזים" / "הרכב"
+PASS: כל הניסוחים מחזירים אותה תשובה
+
+🔴 3. Normalization
+ערכים: 0.6715 / 67.15 / 671.5
+PASS: ערך אחד אחיד (או כמה עם הסבר)
+
+🔴 4. Conflict handling
+כמה ערכים לאותו רכיב
+PASS: בחירה מנומקת או הצגת אי־ודאות
+
+🔴 5. Domain filtering
+שאלה על פורמולציה
+PASS: רק פורמולציות, בלי ציוד/מסמכים אחרים
+
+🔴 6. Empty answer bug
+מצב של ריצה בלי תשובה
+PASS: תמיד יש תשובה או "אין מידע"
+
+🔴 7. Consistency
+אותה שאלה פעמיים
+PASS: אותה תשובה
+
+---
+
+קריטריון סגירה:
+רק אם כל 7 עוברות PASS בפועל → השלב סגור.
+אחת לא עברה → לא סגור.
+
+ברגע שזה נסגר — ממשיכים מיד קדימה.
+
+דוד`,
   labExperiments: 'ניסויים',
   labExperimentsList: 'רשימת ניסויים',
   labExperimentsCount: (n) => `${n} ניסויים`,
@@ -335,7 +389,11 @@ export default {
   labNoSimilarFound: 'לא נמצאו ניסויים דומים.',
 
   labExperimentInputTitle: 'נתוני ניסוי לניתוח AI',
-  labExperimentInputHint: 'העלה קובץ ניסוי (PDF, TXT, CSV, JSON, XLSX) או הדבק/הקלד פרטי ניסוי למטה. אחר כך בחר סוג ניתוח למעלה.',
+  labExperimentInputHint:
+    'העלה קובץ ניסוי (PDF, TXT, CSV, JSON, XLSX/XLS) או הדבק/הקלד פרטי ניסוי למטה. קבצי Excel מומרים לטבלאות Markdown — יוצגו כטבלה ויישלחו כך ל־AI. עדכון קובץ: העלה שוב את ה־Excel ויחולף אותו מחדש.',
+  labExcelTablePreview: 'תצוגת גיליון (כמו Excel)',
+  labExcelShowRawForAi: 'הצגת טקסט Markdown ל־AI (מתקדם)',
+  labExcelSheetTabsAria: 'גיליונות',
   labUploadExperimentFile: 'העלה קובץ ניסוי',
   labExperimentInputPlaceholder: 'הדבק כאן נתוני ניסוי, פורמולה, תוצאות, או תיאור...',
   labAiNeedContext: 'הזן או העלה נתוני ניסוי למעלה ואז בחר סוג ניתוח.',

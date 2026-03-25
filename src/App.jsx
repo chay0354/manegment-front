@@ -2,7 +2,51 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { BrowserRouter, Routes, Route, Link, NavLink, Outlet, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { projects as projectsApi, users as usersApi, tasks as tasksApi, milestones as milestonesApi, documents as documentsApi, notes as notesApi, projectFiles as projectFilesApi, rag as ragApi, gptRag as gptRagApi, chat as chatApi, emails as emailsApi, lab as labApi, auth as authApi, getStoredToken, getStoredUser, setAuth, clearAuth, getNetworkErrorMessage } from './api';
+import { LabExcelSpreadsheet } from './LabExcelSpreadsheet';
 import t from './strings';
+
+/** True when context looks like GFM markdown tables (Excel export uses this). */
+function looksLikeMarkdownTables(text) {
+  if (!text || typeof text !== 'string' || text.length < 30) return false;
+  const lines = text.split('\n');
+  let pipeRows = 0;
+  let hasSep = false;
+  for (const line of lines) {
+    const s = line.trim();
+    if (s.startsWith('|') && s.includes('|')) {
+      pipeRows++;
+      if (/^\|[\s\-:|]+\|/.test(s)) hasSep = true;
+    }
+  }
+  return hasSep && pipeRows >= 2;
+}
+
+const labTableMarkdownComponents = {
+  table: ({ node: _n, ...props }) => (
+    <table
+      style={{ borderCollapse: 'collapse', width: '100%', marginBottom: 12, fontSize: '0.9rem' }}
+      {...props}
+    />
+  ),
+  th: ({ node: _n, ...props }) => (
+    <th
+      style={{
+        border: '1px solid var(--border, #c9ccd1)',
+        padding: '8px 10px',
+        textAlign: 'start',
+        background: 'var(--bg-soft, #f0f2f5)',
+        fontWeight: 600
+      }}
+      {...props}
+    />
+  ),
+  td: ({ node: _n, ...props }) => (
+    <td
+      style={{ border: '1px solid var(--border, #c9ccd1)', padding: '8px 10px', textAlign: 'start' }}
+      {...props}
+    />
+  )
+};
 
 /** Ensure we never pass an object to setError (React cannot render objects). */
 function errorMessageFromResponse(err, fallback) {
@@ -1133,6 +1177,8 @@ function LabTab({ projectId }) {
   const [similarResult, setSimilarResult] = React.useState(null);
   const [activeSection, setActiveSection] = React.useState('insights');
   const [experimentContext, setExperimentContext] = React.useState('');
+  /** Structured sheets from last .xlsx/.xls parse (for spreadsheet UI only). */
+  const [labExcelSheets, setLabExcelSheets] = React.useState(null);
   const [aiResultBySection, setAiResultBySection] = React.useState({});
   const [aiLoadingSection, setAiLoadingSection] = React.useState(null);
   const [savedExperiments, setSavedExperiments] = React.useState([]);
@@ -1150,6 +1196,11 @@ function LabTab({ projectId }) {
     if (payload.prefetchedText != null) {
       setError(null);
       setExperimentContext(String(payload.prefetchedText));
+      setLabExcelSheets(
+        Array.isArray(payload.prefetchedExcelSheets) && payload.prefetchedExcelSheets.length > 0
+          ? payload.prefetchedExcelSheets
+          : null
+      );
       navigate(`/project/${projectId}/section/lab`, { replace: true, state: {} });
       return undefined;
     }
@@ -1176,10 +1227,12 @@ function LabTab({ projectId }) {
           const d = await labApi.parseExperimentFile(projectId, file);
           if (cancelled) return;
           setExperimentContext(d.text ?? '');
+          setLabExcelSheets(Array.isArray(d.excelSheets) && d.excelSheets.length > 0 ? d.excelSheets : null);
         } else {
           const text = await blob.text();
           if (cancelled) return;
           setExperimentContext(text);
+          setLabExcelSheets(null);
         }
         navigate(`/project/${projectId}/section/lab`, { replace: true, state: {} });
       })
@@ -1231,6 +1284,7 @@ function LabTab({ projectId }) {
 
   const loadSavedExperiment = (item) => {
     setExperimentContext(item.content || '');
+    setLabExcelSheets(null);
     setError(null);
   };
 
@@ -1330,11 +1384,18 @@ function LabTab({ projectId }) {
     if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
       setError(null);
       labApi.parseExperimentFile(projectId, file)
-        .then((d) => { setExperimentContext(d.text ?? ''); })
+        .then((d) => {
+          setExperimentContext(d.text ?? '');
+          setLabExcelSheets(Array.isArray(d.excelSheets) && d.excelSheets.length > 0 ? d.excelSheets : null);
+        })
         .catch((err) => setError(err.response?.data?.error || err.message));
     } else {
       const reader = new FileReader();
-      reader.onload = () => { setExperimentContext(String(reader.result ?? '')); setError(null); };
+      reader.onload = () => {
+        setExperimentContext(String(reader.result ?? ''));
+        setLabExcelSheets(null);
+        setError(null);
+      };
       reader.onerror = () => setError('שגיאה בקריאת הקובץ');
       reader.readAsText(file, 'utf-8');
     }
@@ -1375,6 +1436,32 @@ function LabTab({ projectId }) {
   return (
     <div className="card tab-card">
       <h3 style={{ marginBottom: 16 }}>{t.labTab}</h3>
+      <details
+        className="lab-research-charter"
+        style={{
+          marginBottom: 16,
+          padding: '10px 12px',
+          borderRadius: 8,
+          border: '1px solid var(--border, #c9ccd1)',
+          background: 'var(--bg-soft, #f7f8fa)'
+        }}
+      >
+        <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' }}>{t.labResearchCharterSummary}</summary>
+        <div
+          className="muted"
+          dir="rtl"
+          style={{
+            marginTop: 12,
+            whiteSpace: 'pre-wrap',
+            fontSize: '0.88rem',
+            lineHeight: 1.55,
+            maxHeight: 420,
+            overflow: 'auto'
+          }}
+        >
+          {t.labResearchCharterBody}
+        </div>
+      </details>
       {emailImportLabLoading && <p className="loading" style={{ marginBottom: 12 }} aria-live="polite">{t.emailImportLabLoading}</p>}
 
       <section className="rag-section" style={{ marginBottom: 20 }}>
@@ -1391,15 +1478,71 @@ function LabTab({ projectId }) {
           />
           <label htmlFor="lab-experiment-file" className="rag-file-button" style={{ cursor: 'pointer' }}>{t.labUploadExperimentFile}</label>
         </div>
-        <textarea
-          className="form-control"
-          dir="auto"
-          rows={4}
-          placeholder={t.labExperimentInputPlaceholder}
-          value={experimentContext}
-          onChange={e => { setExperimentContext(e.target.value); setError(null); }}
-          style={{ width: '100%', marginBottom: 8 }}
-        />
+        {labExcelSheets && labExcelSheets.length > 0 ? (
+          <>
+            <p className="muted" style={{ margin: '0 0 8px 0', fontSize: '0.85rem', fontWeight: 600 }}>
+              {t.labExcelTablePreview}
+            </p>
+            <div style={{ marginBottom: 12, maxWidth: '100%', overflow: 'hidden' }}>
+              <LabExcelSpreadsheet sheets={labExcelSheets} sheetTabsLabel={t.labExcelSheetTabsAria} />
+            </div>
+            <details style={{ marginBottom: 8 }}>
+              <summary style={{ cursor: 'pointer', fontSize: '0.9rem', color: 'var(--muted, #666)' }}>
+                {t.labExcelShowRawForAi}
+              </summary>
+              <textarea
+                className="form-control"
+                dir="auto"
+                rows={6}
+                placeholder={t.labExperimentInputPlaceholder}
+                value={experimentContext}
+                onChange={(e) => {
+                  setExperimentContext(e.target.value);
+                  setLabExcelSheets(null);
+                  setError(null);
+                }}
+                style={{ width: '100%', marginTop: 8 }}
+              />
+            </details>
+          </>
+        ) : (
+          <>
+            <textarea
+              className="form-control"
+              dir="auto"
+              rows={6}
+              placeholder={t.labExperimentInputPlaceholder}
+              value={experimentContext}
+              onChange={(e) => {
+                setExperimentContext(e.target.value);
+                setLabExcelSheets(null);
+                setError(null);
+              }}
+              style={{ width: '100%', marginBottom: 8 }}
+            />
+            {looksLikeMarkdownTables(experimentContext) && (
+              <div
+                className="lab-excel-table-preview"
+                style={{
+                  marginBottom: 12,
+                  padding: 12,
+                  borderRadius: 8,
+                  border: '1px solid var(--border, #c9ccd1)',
+                  background: 'var(--card-bg, #fff)',
+                  maxHeight: 360,
+                  overflow: 'auto'
+                }}
+              >
+                <p className="muted" style={{ margin: '0 0 10px 0', fontSize: '0.85rem', fontWeight: 600 }}>
+                  {t.labExcelTablePreview}
+                </p>
+                <div className="rag-result-markdown" dir="auto">
+                  <ReactMarkdown components={labTableMarkdownComponents}>{experimentContext}</ReactMarkdown>
+                </div>
+              </div>
+            )}
+          </>
+        )}
         <div className="flex gap" style={{ flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 }}>
           <button type="button" className="rag-file-button" disabled={!experimentContext.trim()} onClick={() => setShowSaveExperimentModal(true)}>
             {t.labSaveExperiment}
@@ -3036,11 +3179,17 @@ function EmailsTab({ projectId }) {
         const originalName = (row && (row.original_name || row.originalName)) || 'file';
         const prefetched =
           res && res.lab_parsed_text != null && res.lab_parsed_text !== undefined ? res.lab_parsed_text : null;
+        const prefetchedSheets =
+          res && Array.isArray(res.lab_parsed_excel_sheets) && res.lab_parsed_excel_sheets.length > 0
+            ? res.lab_parsed_excel_sheets
+            : null;
         if (destination === 'lab' && fileId) {
           navigate(`/project/${projectId}/section/lab`, {
             state: {
               labEmailImport:
-                prefetched != null ? { fileId, originalName, prefetchedText: prefetched } : { fileId, originalName }
+                prefetched != null
+                  ? { fileId, originalName, prefetchedText: prefetched, prefetchedExcelSheets: prefetchedSheets }
+                  : { fileId, originalName, prefetchedExcelSheets: prefetchedSheets }
             }
           });
         } else if (destination === 'lab') {
