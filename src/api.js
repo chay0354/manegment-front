@@ -402,6 +402,7 @@ export const runs = {
 
 const RAG_RUN_TIMEOUT = 120000; // 2 min – research loop runs 4 agents
 const GPT_RAG_SYNC_TIMEOUT = 600000; // 10 min – upload many files + OpenAI indexing
+const GPT_RAG_QUERY_TIMEOUT = 240000; // file_search + grounded chat completion (sequential)
 
 export const rag = {
   health: () => api.get('/api/rag/health').then(r => r.data),
@@ -414,8 +415,8 @@ export const rag = {
 /** OpenAI-hosted RAG: vector store + Responses API `file_search` (management back). */
 export const gptRag = {
   status: (projectId) => api.get(`/api/projects/${projectId}/gpt-rag/status`).then(r => r.data),
-  sync: (projectId) =>
-    api.post(`/api/projects/${projectId}/gpt-rag/sync`, {}, { timeout: GPT_RAG_SYNC_TIMEOUT }).then(r => r.data),
+  sync: (projectId, body = {}) =>
+    api.post(`/api/projects/${projectId}/gpt-rag/sync`, body, { timeout: GPT_RAG_SYNC_TIMEOUT }).then((r) => r.data),
   query: (projectId, body) =>
-    api.post(`/api/projects/${projectId}/gpt-rag/query`, body, { timeout: 120000 }).then(r => r.data)
+    api.post(`/api/projects/${projectId}/gpt-rag/query`, body, { timeout: GPT_RAG_QUERY_TIMEOUT }).then(r => r.data)
 };

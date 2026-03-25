@@ -1625,6 +1625,34 @@ function LabTab({ projectId }) {
 /** Matches maneger-back lib/gptRagSync.js (OpenAI vector upload). */
 const GPT_OPENAI_SYNC_FILE_RE = /\.(pdf|docx|doc|txt|xlsx|xls|pptx|csv|json|md|html|htm)$/i;
 
+/** Match upload hints to rows from a fresh GET /files list (fallback when POST body omits id). */
+function resolveProjectFileIdsFromHints(files, hints) {
+  const list = Array.isArray(files) ? files : [];
+  const hintList = (Array.isArray(hints) ? hints : []).map((h) => String(h || '').trim()).filter(Boolean);
+  if (hintList.length === 0 || list.length === 0) return [];
+  const seen = new Set();
+  const out = [];
+  for (const hint of hintList) {
+    const base = hint.includes('/') || hint.includes('\\') ? hint.split(/[/\\]/).pop() : hint;
+    const candidates = list.filter((f) => {
+      const name = String(f.original_name || '').trim();
+      if (!name) return false;
+      return name === hint || name === base || (base && name.endsWith(base));
+    });
+    const pick = candidates.sort((a, b) => {
+      const ta = new Date(a.created_at || 0).getTime();
+      const tb = new Date(b.created_at || 0).getTime();
+      return tb - ta;
+    })[0];
+    const id = pick?.id;
+    if (id != null && !seen.has(String(id))) {
+      seen.add(String(id));
+      out.push(id);
+    }
+  }
+  return out;
+}
+
 function isGptOpenAiEligibleProjectFile(f) {
   if (!f || !f.storage_path || !String(f.storage_path).trim()) return false;
   const orig = String(f.original_name || '').trim();
@@ -1689,11 +1717,13 @@ function RagTab({ projectId }) {
   /** Prevents duplicate auto-sync for the same project until user leaves OpenAI mode or changes project. */
   const gptAutoSyncForProjectRef = React.useRef('');
   const gptSyncLockRef = React.useRef(false);
+  /** While a post-upload GPT sync is scheduled/running, skip the auto full sync effect (avoids syncing entire project + UI lock). */
+  const ragDeferAutoFullGptSyncRef = React.useRef(false);
   const [gptSyncHadError, setGptSyncHadError] = React.useState(false);
   const [storageRepairLoading, setStorageRepairLoading] = React.useState(false);
 
   const loadFiles = React.useCallback(() => {
-    if (!projectId) return Promise.resolve();
+    if (!projectId) return Promise.resolve([]);
     return projectFilesApi
       .list(projectId)
       .then((d) => {
@@ -1711,9 +1741,11 @@ function RagTab({ projectId }) {
         }
         setProjectFileFoldersCollapsed(new Set(folderKeys));
         setFilesLoading(false);
+        return filtered;
       })
       .catch(() => {
         setFilesLoading(false);
+        return [];
       });
   }, [projectId]);
 
@@ -1733,59 +1765,83 @@ function RagTab({ projectId }) {
       .catch(() => setGptRagStatus({ configured: false, openai: false, reason: 'status failed' }));
   }, [projectId]);
 
-  const runGptSync = React.useCallback(() => {
-    if (!projectId || gptSyncLockRef.current) return;
-    gptSyncLockRef.current = true;
-    setGptRagSyncing(true);
-    setError(null);
-    gptRagApi
-      .sync(projectId)
-      .then(res => {
-        setGptSyncHadError(false);
-        const msg = res.uploaded != null ? `${t.ragGptSyncDone} (${res.uploaded} קבצים)` : t.ragGptSyncDone;
-        setActionMessage(msg);
-        setTimeout(() => setActionMessage(null), 4000);
-        refreshGptRagStatus();
-      })
-      .catch(e => {
-        setGptSyncHadError(true);
-        setError(e.response?.data?.error || e.message || 'סנכרון נכשל');
-      })
-      .finally(() => {
-        gptSyncLockRef.current = false;
-        setGptRagSyncing(false);
-      });
-  }, [projectId, refreshGptRagStatus]);
+  const runGptSync = React.useCallback(
+    (onlyProjectFileIds) => {
+      if (!projectId || gptSyncLockRef.current) return Promise.resolve();
+      gptSyncLockRef.current = true;
+      setGptRagSyncing(true);
+      setError(null);
+      const ids = Array.isArray(onlyProjectFileIds) ? onlyProjectFileIds.map(String).filter(Boolean) : [];
+      const body = ids.length > 0 ? { only_project_file_ids: ids } : {};
+      return gptRagApi
+        .sync(projectId, body)
+        .then((res) => {
+          setGptSyncHadError(false);
+          const base =
+            res.uploaded != null ? `${t.ragGptSyncDone} (${res.uploaded} קבצים)` : t.ragGptSyncDone;
+          const msg = res.indexing_pending ? `${base} — האינדוקס ב-OpenAI ממשיך ברקע` : base;
+          setActionMessage(msg);
+          setTimeout(() => setActionMessage(null), 4000);
+          refreshGptRagStatus();
+        })
+        .catch((e) => {
+          setGptSyncHadError(true);
+          setError(e.response?.data?.error || e.message || 'סנכרון נכשל');
+        })
+        .finally(() => {
+          gptSyncLockRef.current = false;
+          setGptRagSyncing(false);
+        });
+    },
+    [projectId, refreshGptRagStatus, t.ragGptSyncDone]
+  );
 
   /**
    * After new files land in the project, run the same sync as «סנכרון מחדש» (when OpenAI is enabled).
    * Skips if uploaded names are all non–GPT-searchable extensions. Debounced slightly so the file list API includes new rows.
    */
   const queueGptResyncAfterUpload = React.useCallback(
-    (fileNameHints) => {
+    (fileNameHints, projectFileIds) => {
       const hints = Array.isArray(fileNameHints) ? fileNameHints : [];
+      const ids = Array.isArray(projectFileIds) ? projectFileIds.map(String).filter(Boolean) : [];
       const unknownOrEligible =
         hints.length === 0 || hints.some((n) => GPT_OPENAI_SYNC_FILE_RE.test(String(n || '')));
       if (!unknownOrEligible) return;
       if (!gptRagStatusRef.current?.openai) return;
+      ragDeferAutoFullGptSyncRef.current = true;
       window.setTimeout(() => {
         loadFiles()
-          .catch(() => {})
+          .then((freshFiles) => {
+            let resolved = [...ids];
+            if (resolved.length === 0 && hints.length > 0) {
+              resolved = resolveProjectFileIdsFromHints(freshFiles, hints).map(String);
+            }
+            if (resolved.length > 0) {
+              return runGptSync(resolved);
+            }
+            refreshGptRagStatus();
+            return Promise.resolve();
+          })
+          .catch(() => refreshGptRagStatus())
           .finally(() => {
-            runGptSync();
+            window.setTimeout(() => {
+              ragDeferAutoFullGptSyncRef.current = false;
+            }, 800);
           });
       }, 500);
     },
-    [loadFiles, runGptSync]
+    [loadFiles, runGptSync, refreshGptRagStatus]
   );
 
   React.useEffect(() => {
     gptAutoSyncForProjectRef.current = '';
+    ragDeferAutoFullGptSyncRef.current = false;
     setGptSyncHadError(false);
   }, [projectId]);
 
   React.useEffect(() => {
     if (!projectId || filesLoading) return;
+    if (ragDeferAutoFullGptSyncRef.current) return;
     const st = gptRagStatus;
     if (!st?.openai || st.vector_store_id || gptRagSyncing) return;
     const hasEligible = projectFiles.some(isGptOpenAiEligibleProjectFile);
@@ -1905,11 +1961,13 @@ function RagTab({ projectId }) {
     setUploadProgress({ current: 0, total: files.length });
     const errors = [];
     const uploadedOk = [];
+    const uploadedIds = [];
     for (let i = 0; i < files.length; i++) {
       setUploadProgress(prev => ({ ...prev, current: i + 1 }));
       try {
-        await projectFilesApi.upload(projectId, files[i], folderDisplayName);
+        const row = await projectFilesApi.upload(projectId, files[i], folderDisplayName);
         uploadedOk.push(files[i].name || files[i].webkitRelativePath || 'file');
+        if (row?.id != null) uploadedIds.push(row.id);
       } catch (err) {
         errors.push(files[i].name + ': ' + (err.response?.data?.error || err.message));
       }
@@ -1918,7 +1976,7 @@ function RagTab({ projectId }) {
     setUploading(false);
     setUploadProgress({ current: 0, total: 0 });
     await loadFiles();
-    queueGptResyncAfterUpload(uploadedOk);
+    queueGptResyncAfterUpload(uploadedOk, uploadedIds);
     if (errors.length) setError(errors.length === files.length ? errors.join('; ') : t.uploadSomeFailed + ' ' + errors.join('; '));
   };
 
@@ -2213,7 +2271,7 @@ function RagTab({ projectId }) {
                       return (
                         <li key={node.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)', paddingRight: depth * 16 }}>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }} title={node.path}>{finalDisplay}</span>
-                          <button type="button" className="secondary" disabled={addingFromBucket === node.path || addingFolderPath} onClick={() => { setAddingFromBucket(node.path); const hint = [finalDisplay || node.path]; projectFilesApi.addFromBucket(projectId, node.path, safeDisplayName(display, node.path, node.name), parentFolderDisplayName).then(() => { loadFiles(); queueGptResyncAfterUpload(hint); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
+                          <button type="button" className="secondary" disabled={addingFromBucket === node.path || addingFolderPath} onClick={() => { setAddingFromBucket(node.path); const hint = [finalDisplay || node.path]; projectFilesApi.addFromBucket(projectId, node.path, safeDisplayName(display, node.path, node.name), parentFolderDisplayName).then((row) => { loadFiles(); queueGptResyncAfterUpload(hint, row?.id != null ? [row.id] : []); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === node.path ? t.uploading : t.addToProject}</button>
                         </li>
                       );
                     }
@@ -2226,7 +2284,7 @@ function RagTab({ projectId }) {
                             <span style={{ marginLeft: 8 }}>{expanded ? '▼' : '▶'}</span>
                             <span style={{ marginRight: 6 }}>{finalDisplay}</span>
                           </button>
-                          <button type="button" className="secondary" disabled={isAddingThisFolder || addingFromBucket != null} onClick={() => { (async () => { const bucketFiles = collectFilesUnder(node, sharepointDisplayNamesMap); if (bucketFiles.length === 0) return; setAddingFolderPath(node.pathPrefix); setAddingFolderProgress({ current: 0, total: bucketFiles.length }); const hints = []; for (let i = 0; i < bucketFiles.length; i++) { setAddingFolderProgress(prev => ({ ...prev, current: i + 1 })); try { await projectFilesApi.addFromBucket(projectId, bucketFiles[i].path, bucketFiles[i].displayName ?? bucketFiles[i].path.split('/').pop(), finalDisplay); hints.push(bucketFiles[i].displayName ?? bucketFiles[i].path.split('/').pop()); } catch (err) { setError(err.response?.data?.error || err.message); } } await loadFiles(); queueGptResyncAfterUpload(hints); setAddingFolderPath(null); setAddingFolderProgress({ current: 0, total: 0 }); })(); }}>{isAddingThisFolder && addingFolderProgress.total ? `${t.uploading} (${addingFolderProgress.current}/${addingFolderProgress.total})` : isAddingThisFolder ? t.uploading : t.addFolderToProject}</button>
+                          <button type="button" className="secondary" disabled={isAddingThisFolder || addingFromBucket != null} onClick={() => { (async () => { const bucketFiles = collectFilesUnder(node, sharepointDisplayNamesMap); if (bucketFiles.length === 0) return; setAddingFolderPath(node.pathPrefix); setAddingFolderProgress({ current: 0, total: bucketFiles.length }); const hints = []; const addedIds = []; for (let i = 0; i < bucketFiles.length; i++) { setAddingFolderProgress(prev => ({ ...prev, current: i + 1 })); try { const row = await projectFilesApi.addFromBucket(projectId, bucketFiles[i].path, bucketFiles[i].displayName ?? bucketFiles[i].path.split('/').pop(), finalDisplay); hints.push(bucketFiles[i].displayName ?? bucketFiles[i].path.split('/').pop()); if (row?.id != null) addedIds.push(row.id); } catch (err) { setError(err.response?.data?.error || err.message); } } await loadFiles(); queueGptResyncAfterUpload(hints, addedIds); setAddingFolderPath(null); setAddingFolderProgress({ current: 0, total: 0 }); })(); }}>{isAddingThisFolder && addingFolderProgress.total ? `${t.uploading} (${addingFolderProgress.current}/${addingFolderProgress.total})` : isAddingThisFolder ? t.uploading : t.addFolderToProject}</button>
                         </div>
                         {expanded && node.children && node.children.length > 0 && (
                           <ul style={{ listStyle: 'none', padding: 0, margin: 0, borderRight: '1px solid var(--border)', marginRight: 8 }}>
@@ -2247,7 +2305,7 @@ function RagTab({ projectId }) {
                           return (
                             <li key={f.path} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.path}>{safeDisplayName(fileDisplay, f.path, f.name)}</span>
-                              <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); const hint = [safeDisplayName(fileDisplay, f.path, f.name)]; projectFilesApi.addFromBucket(projectId, f.path, safeDisplayName(fileDisplay, f.path, f.name), folderDisplayName).then(() => { loadFiles(); queueGptResyncAfterUpload(hint); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
+                              <button type="button" className="secondary" disabled={addingFromBucket === f.path} onClick={() => { setAddingFromBucket(f.path); const hint = [safeDisplayName(fileDisplay, f.path, f.name)]; projectFilesApi.addFromBucket(projectId, f.path, safeDisplayName(fileDisplay, f.path, f.name), folderDisplayName).then((row) => { loadFiles(); queueGptResyncAfterUpload(hint, row?.id != null ? [row.id] : []); setAddingFromBucket(null); }).catch(err => { setError(err.response?.data?.error || err.message); setAddingFromBucket(null); }); }}>{addingFromBucket === f.path ? t.uploading : t.addToProject}</button>
                             </li>
                           );
                         })}
@@ -2414,17 +2472,17 @@ function RagTab({ projectId }) {
                         setShowSharepointUploadModal(false);
                         setSharepointUploadFiles([]);
                         setSharepointUploadFolderName('');
-                        const afterSharepointIngest = () =>
+                        const afterSharepointIngest = (registeredIds) =>
                           loadFiles()
                             .catch(() => {})
-                            .finally(() => queueGptResyncAfterUpload(gptHintNames));
+                            .finally(() => queueGptResyncAfterUpload(gptHintNames, registeredIds));
                         if (res.uploaded_paths?.length) {
                           projectFilesApi
                             .registerAndIngest(projectId, res.uploaded_paths)
-                            .then(afterSharepointIngest)
-                            .catch(afterSharepointIngest);
+                            .then((reg) => afterSharepointIngest(reg?.registered_ids))
+                            .catch(() => afterSharepointIngest(null));
                         } else {
-                          afterSharepointIngest();
+                          afterSharepointIngest(null);
                         }
                         if (showSharepointPicker) {
                           setSharepointBucketLoading(true);
