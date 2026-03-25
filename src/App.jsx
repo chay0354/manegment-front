@@ -1797,7 +1797,35 @@ function RagTab({ projectId }) {
   );
 
   /**
-   * After new files land in the project, run the same sync as «סנכרון מחדש» (when OpenAI is enabled).
+   * Incremental OpenAI sync without locking the RAG UI (no gptRagSyncing). Same endpoint as manual sync; Matriya-style fire-and-forget after upload.
+   */
+  const runGptSyncInBackground = React.useCallback(
+    (onlyProjectFileIds) => {
+      if (!projectId) return Promise.resolve();
+      const ids = Array.isArray(onlyProjectFileIds) ? onlyProjectFileIds.map(String).filter(Boolean) : [];
+      const body = ids.length > 0 ? { only_project_file_ids: ids } : {};
+      return gptRagApi
+        .sync(projectId, body)
+        .then((res) => {
+          setGptSyncHadError(false);
+          const base =
+            res.uploaded != null ? `${t.ragGptSyncDone} (${res.uploaded} קבצים)` : t.ragGptSyncDone;
+          const msg = res.indexing_pending ? `${base} — האינדוקס ב-OpenAI ממשיך ברקע` : base;
+          setActionMessage(msg);
+          setTimeout(() => setActionMessage(null), 4000);
+          refreshGptRagStatus();
+        })
+        .catch((e) => {
+          setGptSyncHadError(true);
+          setError(e.response?.data?.error || e.message || 'סנכרון נכשל');
+          refreshGptRagStatus();
+        });
+    },
+    [projectId, refreshGptRagStatus, t.ragGptSyncDone]
+  );
+
+  /**
+   * After new files land in the project, run incremental GPT sync in the background (when OpenAI is enabled).
    * Skips if uploaded names are all non–GPT-searchable extensions. Debounced slightly so the file list API includes new rows.
    */
   const queueGptResyncAfterUpload = React.useCallback(
@@ -1817,20 +1845,27 @@ function RagTab({ projectId }) {
               resolved = resolveProjectFileIdsFromHints(freshFiles, hints).map(String);
             }
             if (resolved.length > 0) {
-              return runGptSync(resolved);
+              void runGptSyncInBackground(resolved).finally(() => {
+                window.setTimeout(() => {
+                  ragDeferAutoFullGptSyncRef.current = false;
+                }, 500);
+              });
+            } else {
+              refreshGptRagStatus();
+              window.setTimeout(() => {
+                ragDeferAutoFullGptSyncRef.current = false;
+              }, 800);
             }
-            refreshGptRagStatus();
-            return Promise.resolve();
           })
-          .catch(() => refreshGptRagStatus())
-          .finally(() => {
+          .catch(() => {
+            refreshGptRagStatus();
             window.setTimeout(() => {
               ragDeferAutoFullGptSyncRef.current = false;
             }, 800);
           });
       }, 500);
     },
-    [loadFiles, runGptSync, refreshGptRagStatus]
+    [loadFiles, runGptSyncInBackground, refreshGptRagStatus]
   );
 
   React.useEffect(() => {
