@@ -135,6 +135,8 @@ export default {
   gptRagResyncShort: 'סנכרון מחדש',
   gptRagIndicatorLoading: 'בודק חיבור OpenAI…',
   gptRagIndicatorSyncing: 'מסנכרן....',
+  /** OpenAI vector store still indexing — block Q&A until finished */
+  gptRagIndicatorIndexing: 'מאנדקס מסמכים ב־OpenAI… (המתן לפני שאלה)',
   gptRagIndicatorPending: 'ממתין לסנכרון…',
   gptRagIndicatorSynced: 'מסונכרן',
   gptRagIndicatorNoFiles: 'אין קבצים בפרויקט.',
@@ -150,6 +152,8 @@ export default {
   ragGptNoVectorTitle: 'ממתין לסנכרון או אין מסמכים בפורמט נתמך ל־OpenAI',
   /** Tooltip on disabled «הרץ» while document sync is in progress */
   ragGptRunWhileSyncingTitle: 'לא ניתן להריץ בזמן סנכרון המסמכים (מסנכרן…)',
+  ragGptAskBlockedUploadTitle: 'לא ניתן לשאול בזמן העלאה או הוספת קבצים — המתן לסיום ולסנכרון.',
+  gptRagIndicatorUploadBusy: 'מעלה או מוסיף קבצים… (המתן לפני שאלה)',
   /** Document Q&A: retrieved excerpts shown under the answer */
   ragAnswerSourcesTitle: 'מקורות מהמסמכים (ציטוטים)',
   ragAnswerSourcesHint: 'קטעים שחיפוש המסמכים החזיר לפני ניסוח התשובה — לשקיפות וביקורת.',

@@ -1838,6 +1838,8 @@ function RagTab({ projectId }) {
   const ragDeferAutoFullGptSyncRef = React.useRef(false);
   const [gptSyncHadError, setGptSyncHadError] = React.useState(false);
   const [storageRepairLoading, setStorageRepairLoading] = React.useState(false);
+  /** True while incremental POST /gpt-rag/sync after upload is in flight (same endpoint as manual sync). */
+  const [gptBackgroundSyncBusy, setGptBackgroundSyncBusy] = React.useState(false);
 
   const loadFiles = React.useCallback(() => {
     if (!projectId) return Promise.resolve([]);
@@ -1882,6 +1884,13 @@ function RagTab({ projectId }) {
       .catch(() => setGptRagStatus({ configured: false, openai: false, reason: 'status failed' }));
   }, [projectId]);
 
+  React.useEffect(() => {
+    if (!projectId) return;
+    if (gptRagStatus?.vector_store_status !== 'in_progress') return;
+    const id = window.setInterval(() => refreshGptRagStatus(), 3500);
+    return () => clearInterval(id);
+  }, [projectId, gptRagStatus?.vector_store_status, refreshGptRagStatus]);
+
   const runGptSync = React.useCallback(
     (onlyProjectFileIds) => {
       if (!projectId || gptSyncLockRef.current) return Promise.resolve();
@@ -1921,6 +1930,7 @@ function RagTab({ projectId }) {
       if (!projectId) return Promise.resolve();
       const ids = Array.isArray(onlyProjectFileIds) ? onlyProjectFileIds.map(String).filter(Boolean) : [];
       const body = ids.length > 0 ? { only_project_file_ids: ids } : {};
+      setGptBackgroundSyncBusy(true);
       return gptRagApi
         .sync(projectId, body)
         .then((res) => {
@@ -1936,6 +1946,9 @@ function RagTab({ projectId }) {
           setGptSyncHadError(true);
           setError(e.response?.data?.error || e.message || 'סנכרון נכשל');
           refreshGptRagStatus();
+        })
+        .finally(() => {
+          setGptBackgroundSyncBusy(false);
         });
     },
     [projectId, refreshGptRagStatus, t.ragGptSyncDone]
@@ -1995,13 +2008,13 @@ function RagTab({ projectId }) {
     if (!projectId || filesLoading) return;
     if (ragDeferAutoFullGptSyncRef.current) return;
     const st = gptRagStatus;
-    if (!st?.openai || st.vector_store_id || gptRagSyncing) return;
+    if (!st?.openai || st.vector_store_id || gptRagSyncing || gptBackgroundSyncBusy) return;
     const hasEligible = projectFiles.some(isGptOpenAiEligibleProjectFile);
     if (!hasEligible) return;
     if (gptAutoSyncForProjectRef.current === projectId) return;
     gptAutoSyncForProjectRef.current = projectId;
     runGptSync();
-  }, [projectId, filesLoading, gptRagStatus, gptRagSyncing, projectFiles, runGptSync]);
+  }, [projectId, filesLoading, gptRagStatus, gptRagSyncing, gptBackgroundSyncBusy, projectFiles, runGptSync]);
 
   React.useEffect(() => {
     if (!projectId) return;
@@ -2249,7 +2262,18 @@ function RagTab({ projectId }) {
 
   const runSearch = () => {
     if (!query.trim()) return;
-    if (gptRagSyncing || loading) return;
+    if (loading) return;
+    if (
+      gptRagSyncing ||
+      gptBackgroundSyncBusy ||
+      uploading ||
+      addingFromBucket != null ||
+      addingFolderPath != null ||
+      sharepointUploading ||
+      gptRagStatus?.vector_store_status === 'in_progress'
+    ) {
+      return;
+    }
     setLoading(true);
     setError(null);
     setResult(null);
@@ -2289,6 +2313,25 @@ function RagTab({ projectId }) {
     const body = String(result) + formatGptRagSourcesAppendix(answerSources);
     notesApi.create(projectId, { title, body }).then(() => { setActionMessage(t.saveAsNoteSuccess); setTimeout(() => setActionMessage(null), 2000); }).catch(e => setError(e.response?.data?.error || e.message));
   };
+
+  const ragUploadOrAddInProgress =
+    uploading ||
+    addingFromBucket != null ||
+    addingFolderPath != null ||
+    sharepointUploading;
+  const ragGptVectorIndexing = gptRagStatus?.vector_store_status === 'in_progress';
+  const ragAskPipelineBusy =
+    ragUploadOrAddInProgress ||
+    gptRagSyncing ||
+    gptBackgroundSyncBusy ||
+    ragGptVectorIndexing;
+  const ragAskButtonTitle = ragUploadOrAddInProgress
+    ? t.ragGptAskBlockedUploadTitle
+    : gptRagSyncing || gptBackgroundSyncBusy || ragGptVectorIndexing
+      ? t.ragGptRunWhileSyncingTitle
+      : !gptRagStatus?.vector_store_id
+        ? t.ragGptNoVectorTitle
+        : undefined;
 
   return (
     <div className="card tab-card rag-tab">
@@ -2781,9 +2824,17 @@ function RagTab({ projectId }) {
               dotColor = 'var(--error, #c0392b)';
               label = gptRagStatus.reason || t.ragGptOpenAiUnavailable;
               hintId = 'rag-query-disabled-hint-gpt';
-            } else if (gptRagSyncing) {
+            } else if (ragUploadOrAddInProgress) {
+              dotColor = 'var(--accent)';
+              label = t.gptRagIndicatorUploadBusy;
+              hintId = 'rag-query-disabled-hint-gpt';
+            } else if (gptRagSyncing || gptBackgroundSyncBusy) {
               dotColor = 'var(--accent)';
               label = t.gptRagIndicatorSyncing;
+              hintId = 'rag-query-disabled-hint-gpt';
+            } else if (ragGptVectorIndexing) {
+              dotColor = 'var(--accent)';
+              label = t.gptRagIndicatorIndexing;
               hintId = 'rag-query-disabled-hint-gpt';
             } else if (gptRagStatus.vector_store_id) {
               dotColor = 'var(--success)';
@@ -2833,7 +2884,12 @@ function RagTab({ projectId }) {
                 <span id={hintId} style={{ fontSize: '0.9rem', flex: '1 1 200px' }}>
                   {label}
                 </span>
-                {gptRagStatus?.openai && gptRagStatus.vector_store_id && !gptRagSyncing && (
+                {gptRagStatus?.openai &&
+                  gptRagStatus.vector_store_id &&
+                  !gptRagSyncing &&
+                  !gptBackgroundSyncBusy &&
+                  !ragGptVectorIndexing &&
+                  !ragUploadOrAddInProgress && (
                   <button
                     type="button"
                     className="secondary"
@@ -2847,6 +2903,7 @@ function RagTab({ projectId }) {
                 {gptRagStatus?.openai &&
                   !gptRagStatus.vector_store_id &&
                   !gptRagSyncing &&
+                  !gptBackgroundSyncBusy &&
                   hasGptEligibleFile &&
                   gptSyncHadError && (
                     <button
@@ -2866,7 +2923,7 @@ function RagTab({ projectId }) {
                   type="button"
                   className="secondary"
                   style={{ fontSize: '0.85rem', padding: '4px 10px' }}
-                  disabled={gptRagSyncing}
+                  disabled={gptRagSyncing || gptBackgroundSyncBusy}
                   onClick={refreshGptRagStatus}
                 >
                   {t.gptRagRefreshStatus}
@@ -2875,6 +2932,7 @@ function RagTab({ projectId }) {
                   projectFiles.some((f) => !f.storage_path || !String(f.storage_path).trim()) &&
                   health?.ok &&
                   !gptRagSyncing &&
+                  !gptBackgroundSyncBusy &&
                   !storageRepairLoading && (
                     <button
                       type="button"
@@ -2900,8 +2958,20 @@ function RagTab({ projectId }) {
           onChange={e => setQuery(e.target.value)}
           placeholder={t.questionPlaceholder}
           rows={4}
+          disabled={
+            loading ||
+            ragAskPipelineBusy ||
+            projectFiles.length === 0 ||
+            !gptRagStatus?.openai ||
+            !gptRagStatus?.vector_store_id
+          }
           aria-describedby={
-            gptRagStatus && (!gptRagStatus.openai || !gptRagStatus.vector_store_id) ? 'rag-query-disabled-hint-gpt' : undefined
+            gptRagStatus &&
+            (!gptRagStatus.openai ||
+              !gptRagStatus.vector_store_id ||
+              ragAskPipelineBusy)
+              ? 'rag-query-disabled-hint-gpt'
+              : undefined
           }
         />
         <button
@@ -2909,19 +2979,13 @@ function RagTab({ projectId }) {
           onClick={runSearch}
           disabled={
             loading ||
-            gptRagSyncing ||
+            ragAskPipelineBusy ||
             projectFiles.length === 0 ||
             !gptRagStatus?.openai ||
             !gptRagStatus?.vector_store_id
           }
           className={loading ? 'btn-loading' : ''}
-          title={
-            gptRagSyncing
-              ? t.ragGptRunWhileSyncingTitle
-              : !gptRagStatus?.vector_store_id
-                ? t.ragGptNoVectorTitle
-                : undefined
-          }
+          title={ragAskButtonTitle}
         >
           {loading ? t.loading : t.run}
         </button>
