@@ -380,6 +380,9 @@ export const lab = {
   },
   guard: (projectId, body) => api.post(`/api/projects/${projectId}/guard/check`, body).then(r => r.data),
   aiInsight: (projectId, body) => api.post(`/api/projects/${projectId}/lab/ai-insight`, body, { timeout: 60000 }).then(r => r.data),
+  /** Deterministic A vs B composition table (רכיב | %A | %B | Δ). */
+  comparePercentages: (projectId, body) =>
+    api.post(`/api/projects/${projectId}/lab/compare-percentages`, body, { timeout: 30000 }).then((r) => r.data),
   parseExperimentFile: (projectId, file) => {
     const form = new FormData();
     form.append('file', file, file.name || 'file');

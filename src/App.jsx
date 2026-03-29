@@ -1188,6 +1188,15 @@ function LabTab({ projectId }) {
   const [deletingSavedId, setDeletingSavedId] = React.useState(null);
   const labFileInputRef = React.useRef(null);
   const [emailImportLabLoading, setEmailImportLabLoading] = React.useState(false);
+  const [compareTextA, setCompareTextA] = React.useState('');
+  const [compareTextB, setCompareTextB] = React.useState('');
+  const [compareLabelA, setCompareLabelA] = React.useState('גרסה A');
+  const [compareLabelB, setCompareLabelB] = React.useState('גרסה B');
+  const [compareExpA, setCompareExpA] = React.useState('');
+  const [compareExpB, setCompareExpB] = React.useState('');
+  const [compareResult, setCompareResult] = React.useState(null);
+  const [compareLoading, setCompareLoading] = React.useState(false);
+  const [compareError, setCompareError] = React.useState(null);
 
   /** After "ייבא למעבדה" from email: use server-parsed text if present, else fetch file + parse. */
   React.useEffect(() => {
@@ -1402,6 +1411,58 @@ function LabTab({ projectId }) {
     e.target.value = '';
   };
 
+  const runComparePercentages = () => {
+    setCompareError(null);
+    setCompareResult(null);
+    const expA = compareExpA.trim();
+    const expB = compareExpB.trim();
+    const ta = compareTextA.trim();
+    const tb = compareTextB.trim();
+    if (expA && expB) {
+      setCompareLoading(true);
+      labApi
+        .comparePercentages(projectId, {
+          experimentIdA: expA,
+          experimentIdB: expB,
+          labelA: compareLabelA.trim() || 'גרסה A',
+          labelB: compareLabelB.trim() || 'גרסה B'
+        })
+        .then((d) => setCompareResult(d))
+        .catch((err) => setCompareError(err.response?.data?.error || err.message))
+        .finally(() => setCompareLoading(false));
+      return;
+    }
+    if (ta && !tb) {
+      setCompareLoading(true);
+      labApi
+        .comparePercentages(projectId, {
+          textA: ta,
+          textB: '',
+          labelA: compareLabelA.trim() || 'גרסה A',
+          labelB: compareLabelB.trim() || 'גרסה B'
+        })
+        .then((d) => setCompareResult(d))
+        .catch((err) => setCompareError(err.response?.data?.error || err.message))
+        .finally(() => setCompareLoading(false));
+      return;
+    }
+    if (!ta || !tb) {
+      setCompareError(t.labComparisonNeedInput);
+      return;
+    }
+    setCompareLoading(true);
+    labApi
+      .comparePercentages(projectId, {
+        textA: ta,
+        textB: tb,
+        labelA: compareLabelA.trim() || 'גרסה A',
+        labelB: compareLabelB.trim() || 'גרסה B'
+      })
+      .then((d) => setCompareResult(d))
+      .catch((err) => setCompareError(err.response?.data?.error || err.message))
+      .finally(() => setCompareLoading(false));
+  };
+
   const fetchAiInsight = (sectionId) => {
     if (!experimentContext.trim()) { setError(t.labAiNeedContext); return; }
     setAiLoadingSection(sectionId);
@@ -1420,6 +1481,7 @@ function LabTab({ projectId }) {
     { id: 'failure-patterns', label: t.labFailurePatterns },
     { id: 'snapshot', label: t.labResearchSnapshot },
     { id: 'formula-validate', label: t.labFormulaValidator },
+    { id: 'comparison-percentages', label: t.labComparisonPercentages },
     { id: 'formulation-intelligence', label: t.labFormulationIntelligence },
     { id: 'similar-experiments', label: t.labSimilarExperiments },
     { id: 'relations', label: t.labRelations },
@@ -1652,6 +1714,64 @@ function LabTab({ projectId }) {
           <textarea className="form-control" dir="ltr" rows={3} placeholder={t.labFormulaPlaceholder} value={formulaValidateInput} onChange={e => setFormulaValidateInput(e.target.value)} />
           <button type="button" onClick={runFormulaValidate} style={{ marginTop: 8 }}>{t.validate}</button>
           {formulaValidateResult && <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-soft)', borderRadius: 8 }}><p>{formulaValidateResult.valid !== false ? t.labFormulaValid : t.labFormulaInvalid}</p>{(formulaValidateResult.warnings || []).length > 0 && <ul style={{ paddingRight: 20 }}>{formulaValidateResult.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>}{(formulaValidateResult.errors || []).length > 0 && <ul style={{ paddingRight: 20 }}>{formulaValidateResult.errors.map((e, i) => <li key={i}>{e}</li>)}</ul>}{(formulaValidateResult.similar_experiments || []).length > 0 && <p>{t.labSimilarExperiments}: {formulaValidateResult.similar_experiments.length}</p>}</div>}
+        </section>
+      )}
+
+      {activeSection === 'comparison-percentages' && (
+        <section className="rag-section">
+          <p className="muted" style={{ marginBottom: 12 }}>{t.labComparisonPercentagesHint}</p>
+          <div style={{ display: 'grid', gap: 12, maxWidth: 720 }}>
+            <div className="flex gap" style={{ flexWrap: 'wrap', gap: 8 }}>
+              <input type="text" className="form-control" style={{ flex: '1 1 140px' }} value={compareLabelA} onChange={e => setCompareLabelA(e.target.value)} placeholder={t.labComparisonLabelA} aria-label={t.labComparisonLabelA} />
+              <input type="text" className="form-control" style={{ flex: '1 1 140px' }} value={compareLabelB} onChange={e => setCompareLabelB(e.target.value)} placeholder={t.labComparisonLabelB} aria-label={t.labComparisonLabelB} />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9rem' }}>{t.labComparisonExperimentA}</label>
+              <select className="form-control" value={compareExpA} onChange={e => setCompareExpA(e.target.value)} aria-label={t.labComparisonExperimentA}>
+                <option value="">{t.labComparisonPickExperiment}</option>
+                {experiments.map((e) => (
+                  <option key={`ca-${e.id}`} value={e.experiment_id}>{e.experiment_id}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9rem' }}>{t.labComparisonExperimentB}</label>
+              <select className="form-control" value={compareExpB} onChange={e => setCompareExpB(e.target.value)} aria-label={t.labComparisonExperimentB}>
+                <option value="">{t.labComparisonPickExperiment}</option>
+                {experiments.map((e) => (
+                  <option key={`cb-${e.id}`} value={e.experiment_id}>{e.experiment_id}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap" style={{ flexWrap: 'wrap', gap: 8 }}>
+              <button type="button" className="secondary" disabled={!experimentContext.trim()} onClick={() => setCompareTextA(experimentContext)}>{t.labComparisonFromContextA}</button>
+              <button type="button" className="secondary" disabled={!experimentContext.trim()} onClick={() => setCompareTextB(experimentContext)}>{t.labComparisonFromContextB}</button>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9rem' }}>{t.labComparisonTextA}</label>
+              <textarea className="form-control" dir="auto" rows={5} value={compareTextA} onChange={e => setCompareTextA(e.target.value)} />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9rem' }}>{t.labComparisonTextB}</label>
+              <textarea className="form-control" dir="auto" rows={5} value={compareTextB} onChange={e => setCompareTextB(e.target.value)} />
+            </div>
+            <button type="button" className="rag-file-button" disabled={compareLoading} onClick={runComparePercentages}>{compareLoading ? t.loading : t.labComparisonRun}</button>
+            {compareError && <p className="error" role="alert">{compareError}</p>}
+            {compareLoading && <p className="loading">{t.loading}</p>}
+            {compareResult?.markdownTable && (
+              <div style={{ marginTop: 8, padding: 12, background: 'var(--bg-soft)', borderRadius: 8, overflow: 'auto' }}>
+                {(compareResult.warnings || []).length > 0 && (
+                  <ul style={{ paddingRight: 20, marginBottom: 12, color: 'var(--muted)' }}>
+                    {compareResult.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                  </ul>
+                )}
+                <div className="rag-result-markdown">
+                  <ReactMarkdown>{compareResult.markdownTable}</ReactMarkdown>
+                </div>
+                <p className="muted" style={{ marginTop: 8, fontSize: '0.85rem' }}>mode: {compareResult.mode || '—'} · ΣA ≈ {compareResult.sumA}% · ΣB ≈ {compareResult.sumB}%</p>
+              </div>
+            )}
+          </div>
         </section>
       )}
 
@@ -2951,6 +3071,7 @@ function RagTab({ projectId }) {
             </div>
           );
         })()}
+        <p className="muted" style={{ fontSize: '0.88rem', marginBottom: 10 }}>{t.ragComparePercentagesLabHint}</p>
         <label htmlFor="rag-query-input">{t.askQuestion}</label>
         <textarea
           id="rag-query-input"
