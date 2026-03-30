@@ -1910,6 +1910,7 @@ function formatGptRagSourcesAppendix(sources) {
 
 function RagTab({ projectId }) {
   const [query, setQuery] = React.useState('');
+  const [selectedProjectFileId, setSelectedProjectFileId] = React.useState('');
   const [result, setResult] = React.useState(null);
   /** OpenAI file_search snippets returned with the answer (filename + excerpt). */
   const [answerSources, setAnswerSources] = React.useState(null);
@@ -1996,6 +1997,12 @@ function RagTab({ projectId }) {
   React.useEffect(() => {
     if (projectId) loadFiles();
   }, [projectId, loadFiles]);
+  React.useEffect(() => {
+    if (!selectedProjectFileId) return;
+    if (!projectFiles.some((f) => String(f.id) === String(selectedProjectFileId))) {
+      setSelectedProjectFileId('');
+    }
+  }, [projectFiles, selectedProjectFileId]);
   const refreshGptRagStatus = React.useCallback(() => {
     if (!projectId) return;
     gptRagApi
@@ -2399,7 +2406,12 @@ function RagTab({ projectId }) {
     setResult(null);
     setAnswerSources(null);
     gptRagApi
-      .query(projectId, { query: query.trim() })
+      .query(
+        projectId,
+        selectedProjectFileId
+          ? { query: query.trim(), only_project_file_ids: [selectedProjectFileId] }
+          : { query: query.trim() }
+      )
       .then(data => {
         const out = data.outputs || {};
         const text = (out.synthesis || out.research || out.analysis || '').trim();
@@ -3072,9 +3084,25 @@ function RagTab({ projectId }) {
           );
         })()}
         <p className="muted" style={{ fontSize: '0.88rem', marginBottom: 10 }}>{t.ragComparePercentagesLabHint}</p>
+        <label htmlFor="rag-query-scope">{t.queryOver}</label>
+        <select
+          id="rag-query-scope"
+          value={selectedProjectFileId}
+          onChange={(e) => setSelectedProjectFileId(e.target.value)}
+          disabled={loading || projectFiles.length === 0}
+          style={{ marginBottom: 10 }}
+        >
+          <option value="">{t.allFiles}</option>
+          {projectFiles.map((f) => (
+            <option key={f.id} value={String(f.id)}>
+              {f.original_name || f.storage_path || `#${f.id}`}
+            </option>
+          ))}
+        </select>
         <label htmlFor="rag-query-input">{t.askQuestion}</label>
         <textarea
           id="rag-query-input"
+          dir="auto"
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder={t.questionPlaceholder}
