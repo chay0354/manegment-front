@@ -87,6 +87,7 @@ function AuthenticatedLayout({ user, onLogout }) {
               📁 {t.navProjects}
             </NavLink>
             <Link to={`/project/${id}/section/lab`} className={section === 'lab' ? 'active' : ''}>🧪 {t.navExperiments}</Link>
+            <Link to={`/project/${id}/section/materials`} className={section === 'materials' ? 'active' : ''}>🧱 {t.navMaterials}</Link>
             <Link to={`/project/${id}/section/rag`} className={section === 'rag' ? 'active' : ''}>📁 {t.navDocuments}</Link>
             <Link to={`/project/${id}/section/emails`} className={section === 'emails' ? 'active' : ''}>✉️ {t.navEmails}</Link>
             <Link to={`/project/${id}/section/settings`} className={section === 'settings' ? 'active' : ''}>⚙️ {t.navSettings}</Link>
@@ -454,11 +455,11 @@ function Home({ user, onLogout, dashboardMode = false }) {
   );
 }
 
-const TABS = ['overview', 'tasks', 'milestones', 'notes', 'lab', 'rag', 'emails', 'chat', 'settings'];
+const TABS = ['overview', 'tasks', 'milestones', 'notes', 'lab', 'materials', 'rag', 'emails', 'chat', 'settings'];
 /** Dashboard tiles only — settings stays in sidebar (`/section/settings`). */
 const WIDGET_TABS = TABS.filter(id => id !== 'settings');
-const TAB_LABELS = { overview: `📊 ${t.overview}`, tasks: `📋 ${t.tasks}`, milestones: `🎯 ${t.milestones}`, notes: `📝 ${t.notes}`, lab: `🧪 ${t.labTab}`, rag: `📁 ${t.docsManagementTab}`, emails: `✉️ ${t.emailsTab}`, chat: `💬 ${t.chat}`, settings: `⚙️ ${t.settings}` };
-const TAB_TITLES = { overview: t.overview, tasks: t.tasks, milestones: t.milestones, notes: t.notes, lab: t.labTab, rag: t.docsManagementTab, emails: t.emailsTab, chat: t.chat, settings: t.settings };
+const TAB_LABELS = { overview: `📊 ${t.overview}`, tasks: `📋 ${t.tasks}`, milestones: `🎯 ${t.milestones}`, notes: `📝 ${t.notes}`, lab: `🧪 ${t.labTab}`, materials: `🧱 ${t.materialLibraryTab}`, rag: `📁 ${t.docsManagementTab}`, emails: `✉️ ${t.emailsTab}`, chat: `💬 ${t.chat}`, settings: `⚙️ ${t.settings}` };
+const TAB_TITLES = { overview: t.overview, tasks: t.tasks, milestones: t.milestones, notes: t.notes, lab: t.labTab, materials: t.materialLibraryTab, rag: t.docsManagementTab, emails: t.emailsTab, chat: t.chat, settings: t.settings };
 
 function ProjectView({ user, onLogout }) {
   const { id } = useParams();
@@ -484,18 +485,19 @@ function ProjectView({ user, onLogout }) {
     if (project?.name) setSidebarProjectName(project.name);
   }, [project?.name, setSidebarProjectName]);
 
-  const [overviewCounts, setOverviewCounts] = React.useState({ tasks: 0, tasksDone: 0, milestones: 0, milestonesDone: 0, notes: 0 });
+  const [overviewCounts, setOverviewCounts] = React.useState({ tasks: 0, tasksDone: 0, milestones: 0, milestonesDone: 0, notes: 0, materials: 0 });
   const [chatUnreadCount, setChatUnreadCount] = React.useState(0);
   React.useEffect(() => {
     if (!id) return;
-    Promise.all([tasksApi.list(id), milestonesApi.list(id), notesApi.list(id)])
-      .then(([tRes, mRes, nRes]) => {
+    Promise.all([tasksApi.list(id), milestonesApi.list(id), notesApi.list(id), labApi.materialLibrary(id)])
+      .then(([tRes, mRes, nRes, matRes]) => {
         const tasks = tRes.tasks || [];
         const milestones = mRes.milestones || [];
         const notes = nRes.notes || [];
+        const materials = matRes.materials || [];
         const tasksDone = tasks.filter(t => t.status === 'done').length;
         const milestonesDone = milestones.filter(m => m.completed_at).length;
-        setOverviewCounts({ tasks: tasks.length, tasksDone, milestones: milestones.length, milestonesDone, notes: notes.length });
+        setOverviewCounts({ tasks: tasks.length, tasksDone, milestones: milestones.length, milestonesDone, notes: notes.length, materials: materials.length });
       })
       .catch(() => {});
   }, [id]);
@@ -596,7 +598,7 @@ function ProjectView({ user, onLogout }) {
             {WIDGET_TABS.map(tabId => (
               <button key={tabId} type="button" className="widget-card" onClick={() => setFullScreenSection(tabId)}>
                 <span className="widget-card-icon-wrapper">
-                  <span className="widget-card-icon">{tabId === 'overview' ? '📊' : tabId === 'tasks' ? '📋' : tabId === 'milestones' ? '🎯' : tabId === 'notes' ? '📝' : tabId === 'lab' ? '🧪' : tabId === 'rag' ? '📁' : tabId === 'emails' ? '✉️' : '💬'}</span>
+                  <span className="widget-card-icon">{tabId === 'overview' ? '📊' : tabId === 'tasks' ? '📋' : tabId === 'milestones' ? '🎯' : tabId === 'notes' ? '📝' : tabId === 'lab' ? '🧪' : tabId === 'materials' ? '🧱' : tabId === 'rag' ? '📁' : tabId === 'emails' ? '✉️' : '💬'}</span>
                   {tabId === 'chat' && chatUnreadCount > 0 && (
                     <span className="widget-card-badge" aria-label={t.chatUnreadCount(chatUnreadCount)}>{chatUnreadCount > 99 ? '99+' : chatUnreadCount}</span>
                   )}
@@ -606,6 +608,7 @@ function ProjectView({ user, onLogout }) {
                 {tabId === 'tasks' && <span className="widget-card-meta">{overviewCounts.tasks} {t.tasks}</span>}
                 {tabId === 'milestones' && <span className="widget-card-meta">{overviewCounts.milestones} {t.milestones}</span>}
                 {tabId === 'notes' && <span className="widget-card-meta">{overviewCounts.notes} {t.notes}</span>}
+                {tabId === 'materials' && <span className="widget-card-meta">{overviewCounts.materials} {t.navMaterials}</span>}
                 {tabId === 'chat' && chatUnreadCount > 0 && <span className="widget-card-meta">{t.chatNewMessages(chatUnreadCount)}</span>}
               </button>
             ))}
@@ -623,6 +626,7 @@ function ProjectView({ user, onLogout }) {
                   {fullScreenSection === 'milestones' && <MilestonesTab projectId={id} />}
                   {fullScreenSection === 'notes' && <NotesTab projectId={id} />}
                   {fullScreenSection === 'lab' && <LabTab projectId={id} />}
+                  {fullScreenSection === 'materials' && <MaterialsLibraryTab projectId={id} />}
                   {fullScreenSection === 'rag' && <RagTab projectId={id} />}
                   {fullScreenSection === 'emails' && <EmailsTab projectId={id} />}
                   {fullScreenSection === 'chat' && <ChatTab projectId={id} onUnreadChange={refreshChatUnread} />}
@@ -1145,6 +1149,103 @@ function NotesTab({ projectId }) {
       ))}
       {!loading && list.length === 0 && <p className="loading">{t.noNotesYet}</p>}
       {!loading && list.length > 0 && filteredList.length === 0 && <p className="loading">{t.noResults}</p>}
+    </div>
+  );
+}
+
+function MaterialsLibraryTab({ projectId }) {
+  const [rows, setRows] = React.useState([]);
+  const [stats, setStats] = React.useState({ materials_count: 0, linked_experiments_count: 0, experiments_count: 0 });
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+  const [name, setName] = React.useState('');
+  const [role, setRole] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+
+  const load = React.useCallback(() => {
+    setLoading(true);
+    setError(null);
+    labApi
+      .materialsOverview(projectId)
+      .then((d) => {
+        setRows(Array.isArray(d.materials) ? d.materials : []);
+        setStats(d.stats || { materials_count: 0, linked_experiments_count: 0, experiments_count: 0 });
+      })
+      .catch((err) => setError(err.response?.data?.error || err.message))
+      .finally(() => setLoading(false));
+  }, [projectId]);
+
+  React.useEffect(() => {
+    if (projectId) load();
+  }, [projectId, load]);
+
+  const addMaterial = () => {
+    const nm = name.trim();
+    if (!nm) return;
+    setSaving(true);
+    setError(null);
+    labApi
+      .addMaterial(projectId, { name: nm, role_or_function: role.trim() || null })
+      .then(() => {
+        setName('');
+        setRole('');
+        load();
+      })
+      .catch((err) => setError(err.response?.data?.error || err.message))
+      .finally(() => setSaving(false));
+  };
+
+  const filtered = rows.filter((r) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    const hay = `${r.material_name || ''} ${r.role_or_function || ''}`.toLowerCase();
+    return hay.includes(q);
+  });
+
+  return (
+    <div className="card tab-card">
+      <h3>{t.materialLibraryTitle}</h3>
+      <p className="muted" style={{ marginBottom: 12 }}>{t.materialLibraryIntro}</p>
+      <p className="muted" style={{ marginBottom: 12 }}>
+        {stats.materials_count || 0} {t.navMaterials} · {stats.linked_experiments_count || 0} {t.linkedExperiments} · {stats.experiments_count || 0} {t.labExperiments}
+      </p>
+
+      <div className="rag-section" style={{ marginBottom: 16 }}>
+        <h4 style={{ fontSize: '1rem', marginBottom: 8 }}>{t.addMaterialToLibrary}</h4>
+        <div className="flex gap" style={{ flexWrap: 'wrap' }}>
+          <input className="form-control" value={name} onChange={(e) => setName(e.target.value)} placeholder={t.materialNamePlaceholder} style={{ flex: '1 1 220px' }} />
+          <input className="form-control" value={role} onChange={(e) => setRole(e.target.value)} placeholder={t.materialRoleOrFunction} style={{ flex: '1 1 260px' }} />
+          <button type="button" onClick={addMaterial} disabled={saving || !name.trim()}>{saving ? t.loading : t.add}</button>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <input type="search" placeholder={t.searchInList} value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 260 }} />
+      </div>
+
+      {loading && <p className="loading">{t.loading}</p>}
+      {error && <p className="error">{error}</p>}
+      {!loading && !error && filtered.length === 0 && <p className="muted">{t.noMaterialsYet}</p>}
+      {!loading && !error && filtered.length > 0 && (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {filtered.map((row) => (
+            <div key={row.material_name} className="list-item" style={{ alignItems: 'flex-start', flexDirection: 'column' }}>
+              <div style={{ fontWeight: 600 }}>{row.material_name}</div>
+              <div className="muted">{t.materialRoleOrFunction}: {row.role_or_function || '—'}</div>
+              <div className="muted">{t.linkedExperiments}: {row.experiment_count || 0}</div>
+              {Array.isArray(row.linked_experiments) && row.linked_experiments.length > 0 && (
+                <div className="muted" style={{ fontSize: '0.88rem' }}>
+                  {row.linked_experiments.slice(0, 6).map((link) => {
+                    const pct = typeof link.percentage === 'number' ? `, ${link.percentage}${link.unit || '%'}` : '';
+                    return `${link.experiment_id || '—'}${link.experiment_outcome ? ` (${link.experiment_outcome}${pct})` : pct ? ` (${pct.slice(2)})` : ''}`;
+                  }).join(' · ')}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
