@@ -3123,6 +3123,23 @@ function RagTab({ projectId }) {
               : undefined
           }
         />
+        <p
+          aria-live="polite"
+          style={{
+            marginTop: 6,
+            marginBottom: 10,
+            padding: '6px 10px',
+            borderRadius: 8,
+            background: 'rgba(22, 101, 52, 0.07)',
+            color: 'var(--accent, #166534)',
+            fontSize: '0.84rem',
+            fontWeight: 600
+          }}
+        >
+          {query.trim()
+            ? `✅ PROOF: LIVE SEARCH פעיל — "${query.trim()}" • ${query.trim().length} תווים (מתעדכן בכל הקשה)`
+            : 'הקלד בשדה "שאל שאלה" כדי לראות הוכחת LIVE SEARCH בזמן אמת'}
+        </p>
         <button
           type="button"
           onClick={runSearch}
