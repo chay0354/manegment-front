@@ -2558,12 +2558,6 @@ function RagTab({ projectId }) {
     gptRagSyncing ||
     gptBackgroundSyncBusy ||
     ragGptVectorIndexing;
-  const askDisabled =
-    loading ||
-    ragAskPipelineBusy ||
-    projectFiles.length === 0 ||
-    !gptRagStatus?.openai ||
-    !gptRagStatus?.vector_store_id;
   const ragAskButtonTitle = ragUploadOrAddInProgress
     ? t.ragGptAskBlockedUploadTitle
     : gptRagSyncing || gptBackgroundSyncBusy || ragGptVectorIndexing
@@ -3212,9 +3206,15 @@ function RagTab({ projectId }) {
           dir="auto"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          rows={4}
-          disabled={askDisabled}
           placeholder={t.questionPlaceholder}
+          rows={4}
+          disabled={
+            loading ||
+            ragAskPipelineBusy ||
+            projectFiles.length === 0 ||
+            !gptRagStatus?.openai ||
+            !gptRagStatus?.vector_store_id
+          }
           aria-describedby={
             gptRagStatus &&
             (!gptRagStatus.openai ||
@@ -3244,7 +3244,13 @@ function RagTab({ projectId }) {
         <button
           type="button"
           onClick={runSearch}
-          disabled={askDisabled}
+          disabled={
+            loading ||
+            ragAskPipelineBusy ||
+            projectFiles.length === 0 ||
+            !gptRagStatus?.openai ||
+            !gptRagStatus?.vector_store_id
+          }
           className={loading ? 'btn-loading' : ''}
           title={ragAskButtonTitle}
         >
